@@ -28,11 +28,13 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path, PurePosixPath
           from zipfile import ZipFile
+          import os
           import stat
 
           archive = Path("pes2017-recomp-main.zip")
           destination = Path("pes2017-recomp-main")
           destination.mkdir()
+          symlinks = []
 
           with ZipFile(archive) as z:
               infos = [i for i in z.infolist() if i.filename and i.filename != "/"]
@@ -52,17 +54,27 @@ jobs:
                   raw = PurePosixPath(info.filename)
                   if raw.is_absolute() or ".." in raw.parts:
                       raise SystemExit(f"Unsafe ZIP path: {info.filename}")
-                  mode = (info.external_attr >> 16) & 0xFFFF
-                  if stat.S_ISLNK(mode):
-                      raise SystemExit(f"Symlink entry is not allowed: {info.filename}")
-
                   relative = PurePosixPath(*raw.parts[1:]) if strip_root else raw
                   if not relative.parts:
                       continue
+
                   target = destination.joinpath(*relative.parts)
                   resolved = target.resolve()
                   if destination.resolve() not in resolved.parents and resolved != destination.resolve():
                       raise SystemExit(f"ZIP path escapes destination: {info.filename}")
+
+                  mode = (info.external_attr >> 16) & 0xFFFF
+                  if stat.S_ISLNK(mode):
+                      link_text = z.read(info).decode("utf-8")
+                      link_path = PurePosixPath(link_text)
+                      if link_path.is_absolute():
+                          raise SystemExit(f"Absolute symlink target is not allowed: {info.filename}")
+                      link_resolved = (target.parent / link_text).resolve(strict=False)
+                      if destination.resolve() not in link_resolved.parents and link_resolved != destination.resolve():
+                          raise SystemExit(f"Symlink escapes destination: {info.filename} -> {link_text}")
+                      symlinks.append((target, link_text, info.filename))
+                      continue
+
                   if info.is_dir():
                       target.mkdir(parents=True, exist_ok=True)
                       continue
@@ -82,8 +94,15 @@ jobs:
                           dst.write(block)
                   extracted += 1
 
-          print(f"Extracted files: {extracted}")
-          print(f"Uncompressed file bytes: {total}")
+              for target, link_text, archive_name in symlinks:
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  if target.exists() or target.is_symlink():
+                      raise SystemExit(f"Symlink path already exists: {archive_name}")
+                  os.symlink(link_text, target)
+
+          print(f"Extracted regular files: {extracted}")
+          print(f"Restored safe relative symlinks: {len(symlinks)}")
+          print(f"Uncompressed regular-file bytes: {total}")
           print(f"Destination: {destination}")
           PY
           test -n "$(find pes2017-recomp-main -type f -print -quit)"
