@@ -1,0 +1,48 @@
+# ---- game data: from your own disc, never commit ----
+/pes17/
+/pes17-iso/
+/pes/
+/GAME/
+*.xex
+*.xexp
+*.pe
+*.iso
+*.cpk
+
+# ---- generated C++: ppc/ is committed in this repository (Pes2017-NX) ----
+
+# ---- XenonRecomp build ----
+/third_party/XenonRecomp/build/
+
+# ---- build artifacts ----
+/build/
+/build-*/
+build*-tu0/
+/out/
+*.elf
+*.nro
+*.nso
+*.nacp
+*.nsp
+compile_commands.json
+.cache/
+
+# ---- logs and scratch ----
+logs-*.txt
+*.log
+*.tmp
+/diagnosis/
+/captures/
+/saves/
+/ucode_dump/
+/*.png
+/*.spv
+.env
+
+# ---- editor / OS ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+__pycache__/
+*.pyc
