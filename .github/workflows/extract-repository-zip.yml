@@ -1,0 +1,100 @@
+name: Extract repository ZIP
+
+on:
+  push:
+    paths:
+      - ".github/workflows/extract-repository-zip.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Inspect and safely extract ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s pes2017-recomp-main.zip
+          test ! -e pes2017-recomp-main
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+          import stat
+
+          archive = Path("pes2017-recomp-main.zip")
+          destination = Path("pes2017-recomp-main")
+          destination.mkdir()
+
+          with ZipFile(archive) as z:
+              infos = [i for i in z.infolist() if i.filename and i.filename != "/"]
+              if not infos:
+                  raise SystemExit("ZIP archive is empty")
+
+              parts = [PurePosixPath(i.filename).parts for i in infos]
+              roots = {p[0] for p in parts if p}
+              strip_root = (
+                  len(roots) == 1
+                  and all(len(p) > 0 and p[0] == "pes2017-recomp-main" for p in parts)
+              )
+
+              total = 0
+              extracted = 0
+              for info in infos:
+                  raw = PurePosixPath(info.filename)
+                  if raw.is_absolute() or ".." in raw.parts:
+                      raise SystemExit(f"Unsafe ZIP path: {info.filename}")
+                  mode = (info.external_attr >> 16) & 0xFFFF
+                  if stat.S_ISLNK(mode):
+                      raise SystemExit(f"Symlink entry is not allowed: {info.filename}")
+
+                  relative = PurePosixPath(*raw.parts[1:]) if strip_root else raw
+                  if not relative.parts:
+                      continue
+                  target = destination.joinpath(*relative.parts)
+                  resolved = target.resolve()
+                  if destination.resolve() not in resolved.parents and resolved != destination.resolve():
+                      raise SystemExit(f"ZIP path escapes destination: {info.filename}")
+                  if info.is_dir():
+                      target.mkdir(parents=True, exist_ok=True)
+                      continue
+
+                  total += info.file_size
+                  if info.file_size > 100 * 1024 * 1024:
+                      raise SystemExit(
+                          f"File exceeds GitHub's 100 MiB per-file limit: "
+                          f"{info.filename} ({info.file_size} bytes)"
+                      )
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  with z.open(info) as src, target.open("wb") as dst:
+                      while True:
+                          block = src.read(1024 * 1024)
+                          if not block:
+                              break
+                          dst.write(block)
+                  extracted += 1
+
+          print(f"Extracted files: {extracted}")
+          print(f"Uncompressed file bytes: {total}")
+          print(f"Destination: {destination}")
+          PY
+          test -n "$(find pes2017-recomp-main -type f -print -quit)"
+
+      - name: Commit extracted files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pes2017-recomp-main
+          git diff --cached --quiet && { echo "No extracted files to commit."; exit 0; }
+          git commit -m "Extract pes2017-recomp-main archive"
+          git push origin HEAD:main
