@@ -1,0 +1,109 @@
+name: Build Switch NRO
+
+# Builds pes17.nro from the tree (source + ppc/) with devkitA64 and the pinned
+# BO2 Mesa Horizon SDK. Runs after "Apply source ZIP" and on demand.
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Apply source ZIP"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-nro
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Check inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s CMakeLists.txt || { echo "source tree missing: upload pes2017-nx-src.zip first"; exit 1; }
+          test -s ppc/XEX_TARGET
+          test -s ppc/ppc_func_mapping.cpp
+          test -s ppc/stubs_generated.cpp
+          grep -Fx 'title_id=0x4A3007D1' ppc/XEX_TARGET
+          echo "PPC translation units: $(ls ppc/ppc_recomp.*.cpp | wc -l)"
+
+      - name: Free disk space
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Mesa Horizon SDK (BO2 release 1.1.0, pinned)
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://github.com/AlvaroEPena/bo2-360-nx/releases/download/Release-1.1.0/bo2-360-nx-release-1.1.0-switch%2Bwindows-build-kit.zip"
+          archive="$RUNNER_TEMP/bo2-kit.zip"
+          curl --fail --location --retry 3 "$url" --output "$archive"
+          echo "5c973a38b0921650ebfddf47fd9064f46f5aefa60d019a84371cfb0af328a26f  $archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/bo2-kit"
+          unzip -q "$archive" -d "$RUNNER_TEMP/bo2-kit"
+          manifest="$(find "$RUNNER_TEMP/bo2-kit" -type f -path '*/runtime/manifest.json' -print -quit)"
+          sdk="$(dirname "$manifest")/switch/portlibs"
+          test -s "$sdk/lib/libvulkan.a"
+          test -s "$sdk/lib/libzstd.a"
+          test -s "$sdk/include/vulkan/vulkan.h"
+          echo "MESA_SDK=$sdk" >> "$GITHUB_ENV"
+
+      - name: devkitA64 image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull devkitpro/devkita64:latest
+          echo "id=$(docker image inspect --format '{{.Id}}' devkitpro/devkita64:latest)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore build cache
+        uses: actions/cache@v4
+        with:
+          path: build-switch
+          key: nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-${{ hashFiles('runtime/**', 'switch/**', 'third_party/ffmpeg-xenia/**', 'CMakeLists.txt') }}
+          restore-keys: |
+            nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" -v "$MESA_SDK:/mesa-sdk:ro" -w /work \
+            devkitpro/devkita64:latest bash -euc '
+              export DEVKITPRO=/opt/devkitpro
+              export DEVKITA64="$DEVKITPRO/devkitA64"
+              export PATH="$DEVKITA64/bin:$DEVKITPRO/tools/bin:$PATH"
+              export PES17_SWITCH_VULKAN_SDK=/mesa-sdk
+              export JOBS=3
+              # The PPC archive first, so it is cached even if the runtime fails.
+              BUILD_SWITCH_TARGET=ppc_recomp bash ./build-switch.sh 2>&1 | tail -n 40
+              bash ./build-switch.sh 2>&1 | grep -E "error|warning: unused|Error|NRO ready|^\[" | grep -v "^\[.*Building CXX object CMakeFiles/ppc_recomp" | tail -n 400
+              test -s build-switch/pes17.nro
+              aarch64-none-elf-nm -n -C --defined-only build-switch/pes17 > build-switch/pes17.map
+              cp build-switch/pes17.nro build-switch/pes17.map /work/
+            '
+          python3 -c 'f=open("pes17.nro","rb"); f.seek(0x10); assert f.read(4)==b"NRO0", "bad NRO header"'
+          ls -lh pes17.nro pes17.map
+          sha256sum pes17.nro
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: pes17-nro
+          path: |
+            pes17.nro
+            pes17.map
+          if-no-files-found: error
+          retention-days: 14
