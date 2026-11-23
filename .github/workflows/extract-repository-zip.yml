@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - ".github/workflows/extract-repository-zip.yml"
+      - ".github/extract-zip.trigger"
   workflow_dispatch:
 
 permissions:
