@@ -1,0 +1,71 @@
+name: Import generated PPC from default.xex
+
+on:
+  push:
+    paths:
+      - ".github/workflows/import-ppc-from-default-xex.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-ppc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out destination repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: destination
+          persist-credentials: true
+
+      - name: Check out the exact source branch used by the successful build
+        uses: actions/checkout@v4
+        with:
+          repository: ifrittrifi/PES2017-Switch
+          ref: work/switch-libnx-platform
+          path: source
+          persist-credentials: false
+
+      - name: Verify generated PPC belongs to the expected default.xex
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s source/ppc/XEX_TARGET
+          test -s source/ppc/ppc_func_mapping.cpp
+          test -s source/ppc/stubs_generated.cpp
+          grep -Fx 'title_id=0x4A3007D1' source/ppc/XEX_TARGET
+          grep -Fx 'version=0x00000012' source/ppc/XEX_TARGET
+          grep -Fx 'sha256=b914ec9a1abb3a9b42a64255b6aa8ff27312da126f7c18f8c880106b832779e6' source/ppc/XEX_TARGET
+          count="$(find source/ppc -maxdepth 1 -type f -name 'ppc_recomp.*.cpp' | wc -l)"
+          test "$count" -gt 1000
+          echo "Verified generated PPC translation units: $count"
+          du -sh source/ppc
+
+      - name: Copy PPC output without touching other destination files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e destination/ppc
+          cp -a source/ppc destination/ppc
+          printf '%s\n' \
+            'Generated PPC output imported from ifrittrifi/PES2017-Switch.' \
+            'Source branch: work/switch-libnx-platform' \
+            'Source commit: '"$(git -C source rev-parse HEAD)" \
+            'XEX title ID: 0x4A3007D1' \
+            'XEX version: 0x00000012' \
+            'XEX SHA-256: b914ec9a1abb3a9b42a64255b6aa8ff27312da126f7c18f8c880106b832779e6' \
+            > destination/ppc/IMPORT_INFO.txt
+
+      - name: Commit PPC directory to destination repository
+        shell: bash
+        working-directory: destination
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ppc
+          git diff --cached --quiet && { echo "No PPC changes to commit."; exit 0; }
+          git commit -m "Add generated PPC output for default.xex"
+          git push origin HEAD:main
