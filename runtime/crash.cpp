@@ -2,6 +2,9 @@
 // are ordinary global symbols named sub_XXXXXXXX, so a host backtrace doubles
 // as the guest call stack.
 #include "crash.h"
+#ifdef __SWITCH__
+#include "switch/profiler_nx.h"
+#endif
 #include "log.h"
 #include "platform.h"
 #include "gpu/internal.h"
@@ -73,6 +76,7 @@ void crash::RegisterThread(const char* name)
 {
     g_switchThreadName = name ? name : "";
     if (name) platform::SetThreadName(name);
+    profiler_nx::RegisterCurrentThread(name);
 }
 
 const char* crash::CurrentThreadName()
@@ -80,7 +84,11 @@ const char* crash::CurrentThreadName()
     return g_switchThreadName.empty() ? nullptr : g_switchThreadName.c_str();
 }
 
-void crash::UnregisterThread() { g_switchThreadName.clear(); }
+void crash::UnregisterThread()
+{
+    g_switchThreadName.clear();
+    profiler_nx::UnregisterCurrentThread();
+}
 
 void crash::DumpAllThreads(const char* reason)
 {

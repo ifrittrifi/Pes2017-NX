@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "profiler_nx.h"
+#include <cstring>
 #include <new>
 
 #include <sys/stat.h>
@@ -121,6 +123,7 @@ void platform::Initialise()
 {
     g_mainThreadId = CurrentThreadId();
 
+
     // The runtime keeps its own VkPipelineCache on SD (vulkan/pipeline.cpp);
     // Mesa's disk cache beside it would only add SD writes during play.
     setenv("MESA_SHADER_CACHE_DISABLE", "true", 0);
@@ -143,6 +146,29 @@ void platform::Initialise()
             svcOutputDebugString(message, sizeof(message) - 1);
         }
     }
+
+    // Settings without a rebuild: sdmc:/switch/PES2017/env.txt, KEY=VALUE a
+    // line (# starts a comment), read before anything looks at its variables.
+    if (FILE* env = std::fopen("sdmc:/switch/PES2017/env.txt", "r"))
+    {
+        char line[256];
+        while (std::fgets(line, sizeof line, env))
+        {
+            char* text = line;
+            while (*text == ' ' || *text == '\t') ++text;
+            if (*text == '#' || *text == '\0' || *text == '\n' || *text == '\r') continue;
+            char* equals = std::strchr(text, '=');
+            if (!equals) continue;
+            *equals = '\0';
+            char* value = equals + 1;
+            value[std::strcspn(value, "\r\n")] = '\0';
+            for (char* end = equals; end > text && (end[-1] == ' ' || end[-1] == '\t'); --end) end[-1] = '\0';
+            while (*value == ' ' || *value == '\t') ++value;
+            if (*text) setenv(text, value, 1);
+        }
+        std::fclose(env);
+    }
+    profiler_nx::Start();
 
     // Input remains usable even when the SD card is absent or cannot mount.
     switch_input::Initialize();

@@ -97,6 +97,7 @@ if(PES17_SWITCH)
         "${CMAKE_SOURCE_DIR}/runtime/switch/posix_compat.cpp"
         "${CMAKE_SOURCE_DIR}/runtime/switch/guest_memory_nx.cpp"
         "${CMAKE_SOURCE_DIR}/runtime/switch/exception.cpp"
+        "${CMAKE_SOURCE_DIR}/runtime/switch/profiler_nx.cpp"
         "${CMAKE_SOURCE_DIR}/switch/source/input.cpp")
 endif()
 

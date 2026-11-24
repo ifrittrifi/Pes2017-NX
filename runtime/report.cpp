@@ -85,6 +85,19 @@ void report::Frame(bool world)
     std::copy(std::begin(spent), std::end(spent), s.spentAtLast);
     s.lastWasWorld = world;
     s.last = now;
+#ifdef __SWITCH__
+    // A console run seldom ends cleanly (HOME, power): write the report every
+    // 30 seconds as well, so far.
+    static auto lastWrite = now;
+    if (now - lastWrite >= std::chrono::seconds(30))
+    {
+        lastWrite = now;
+        s.written = false;
+        s.lock.unlock();
+        Write();
+        s.lock.lock();
+    }
+#endif
 }
 
 void report::Spent(Time time, uint64_t nanoseconds)
