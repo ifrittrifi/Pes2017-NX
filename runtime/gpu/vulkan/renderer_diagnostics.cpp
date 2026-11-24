@@ -74,8 +74,8 @@ namespace vk::renderer::detail
             if (const char* asked = env::Text("PES17_DUMP_FRAMES")) return asked;
 #ifdef __SWITCH__
             // The L3+R3 dump (renderer_draw.cpp DumpRequested) writes here.
-            mkdir("sdmc:/switch/PES2017/dump", 0777);
-            return "sdmc:/switch/PES2017/dump";
+            mkdir("sdmc:/switch/pes2017/dump", 0777);
+            return "sdmc:/switch/pes2017/dump";
 #else
             return static_cast<const char*>(nullptr);
 #endif

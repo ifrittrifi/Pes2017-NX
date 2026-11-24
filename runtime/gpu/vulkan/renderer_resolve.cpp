@@ -940,6 +940,13 @@ void vk::renderer::Swap(uint32_t frontBuffer)
             }
             lastFence = fence;
             vk::renderer::detail::ReportWaits(600);
+            {
+                static uint64_t lastPending = 0;
+                if (g.shadersPending != lastPending)
+                    LOGI("perf: %llu draws skipped while their shader was being built",
+                         (unsigned long long)(g.shadersPending - lastPending));
+                lastPending = g.shadersPending;
+            }
             g.vertexBytesCopied = g.vertexBytesReused = 0;
             g.windowWriteBacks = 0;
             LOGI("renderer: last 600 swaps: %llu draws (%llu recorded), %llu resolves; skipped:%s",

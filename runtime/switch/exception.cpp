@@ -16,7 +16,7 @@
 //      (committing it first when nothing is there: the window reads as zeroed
 //      memory, as the Linux build's MAP_NORESERVE reservation does), retry;
 //   2. anything else: write registers and a stack scan to
-//      sdmc:/switch/PES2017/crash.log and stop with an error on screen.
+//      sdmc:/switch/pes2017/crash.log and stop with an error on screen.
 #include "guest_memory_nx.h"
 
 #include <atomic>
@@ -354,7 +354,7 @@ namespace
     {
         FsFileSystem* fs = nullptr;
         char path[FS_MAX_PATH];
-        if (fsdevTranslatePath("sdmc:/switch/PES2017/crash.log", &fs, path) < 0 || !fs) return;
+        if (fsdevTranslatePath("sdmc:/switch/pes2017/crash.log", &fs, path) < 0 || !fs) return;
         fsFsCreateFile(fs, path, 0, 0);
         FsFile f;
         if (R_FAILED(fsFsOpenFile(fs, path, FsOpenMode_Write | FsOpenMode_Append, &f))) return;

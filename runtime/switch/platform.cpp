@@ -139,17 +139,28 @@ void platform::Initialise()
     else
     {
         mkdir("sdmc:/switch", 0777);
-        mkdir("sdmc:/switch/PES2017", 0777);
-        if (chdir("sdmc:/switch/PES2017") != 0)
+        mkdir("sdmc:/switch/pes2017", 0777);
+        // The shader caches live in their own folder; ones an earlier build left beside the
+        // game are moved in rather than built again.
+        mkdir("sdmc:/switch/pes2017/shader", 0777);
+        for (const char* name : { "shader_cache.bin", "pipeline_cache.bin" })
         {
-            constexpr char message[] = "[PES17] failed to enter sdmc:/switch/PES2017\n";
+            char from[96], to[96];
+            std::snprintf(from, sizeof from, "sdmc:/switch/pes2017/%s", name);
+            std::snprintf(to, sizeof to, "sdmc:/switch/pes2017/shader/%s", name);
+            struct stat info{};
+            if (stat(from, &info) == 0 && stat(to, &info) != 0) std::rename(from, to);
+        }
+        if (chdir("sdmc:/switch/pes2017") != 0)
+        {
+            constexpr char message[] = "[PES17] failed to enter sdmc:/switch/pes2017\n";
             svcOutputDebugString(message, sizeof(message) - 1);
         }
     }
 
-    // Settings without a rebuild: sdmc:/switch/PES2017/env.txt, KEY=VALUE a
+    // Settings without a rebuild: sdmc:/switch/pes2017/env.txt, KEY=VALUE a
     // line (# starts a comment), read before anything looks at its variables.
-    if (FILE* env = std::fopen("sdmc:/switch/PES2017/env.txt", "r"))
+    if (FILE* env = std::fopen("sdmc:/switch/pes2017/env.txt", "r"))
     {
         char line[256];
         while (std::fgets(line, sizeof line, env))

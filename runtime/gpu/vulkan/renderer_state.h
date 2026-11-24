@@ -444,6 +444,8 @@ namespace vk::renderer::detail
         // still be drawing with them, so they go at shutdown.
         std::vector<VkPipeline> replacedPipelines;
         uint64_t shadersBuiltAtDraw = 0, pipelinesLinked = 0, pipelinesOptimised = 0;
+        uint64_t shadersPending = 0;          // draws skipped for a shader still being built
+        bool asyncShaders = false;            // after the start-up prewarm, misses are built off the draw thread
         std::vector<Recorded> recorded;   // for the shader cache
 
         // What the command buffer was last told, so a draw that asks for the same
@@ -857,6 +859,8 @@ namespace vk::renderer::detail
     const char* ShaderCachePath();
     void WriteShaderCache(bool force = false);
     void CollectPassTimings(uint32_t slot);
+    bool ShaderReadyOrQueued(shader::Type type, uint64_t hash, const uint32_t* code, size_t words, Shader& out);
+    bool ShadersAsync();
     void ReportWaits(uint64_t frames);
     void WriteDump(const char* name, const uint8_t* rgba, uint32_t width, uint32_t height);
     const char* FrameDumpDirectory();

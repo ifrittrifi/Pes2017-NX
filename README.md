@@ -31,18 +31,18 @@ lalu mengulang instruksi. Desain ini dari bo2-360-nx, yang sudah jalan di konsol
 
 ## Menjalankan di Switch
 
-1. Salin `pes17.nro` ke `sdmc:/switch/PES2017/pes17.nro`.
-2. Salin file game dari disc sendiri ke `sdmc:/switch/PES2017/game/`: `default.xex` (harus SHA-256
+1. Salin `pes2017.nro` ke `sdmc:/switch/pes2017/pes2017.nro`.
+2. Salin file game dari disc sendiri ke `sdmc:/switch/pes2017/game/`: `default.xex` (harus SHA-256
    `b914ec9a…79e6`), semua `*.cpk`, dan `nxeart`.
 3. Jalankan dalam **mode aplikasi penuh**: tahan **R** saat membuka sebuah game dari HOME Menu sampai
    Homebrew Menu muncul, lalu buka PES 2017. Dari album (mode applet) memorinya hanya sekitar 400 MB.
-4. Log ada di `sdmc:/switch/PES2017/pes2017-switch.log`. Kalau crash, ada juga
-   `sdmc:/switch/PES2017/crash.log`. Kirim kedua file itu, bersama `pes17.map` dari artifact build yang sama.
+4. Log ada di `sdmc:/switch/pes2017/pes2017-switch.log`. Kalau crash, ada juga
+   `sdmc:/switch/pes2017/crash.log`. Kirim kedua file itu, bersama `pes17.map` dari artifact build yang sama.
 
 ## Build
 
 Lewat GitHub Actions (`.github/workflows/build-nro.yml`): container `devkitpro/devkita64` plus SDK Mesa
-Horizon dari rilis bo2-360-nx 1.1.0. Hasilnya artifact `pes17-nro` berisi `pes17.nro` dan `pes17.map`.
+Horizon dari rilis bo2-360-nx 1.1.0. Hasilnya artifact `pes2017-nro` berisi `pes2017.nro` dan `pes17.map`.
 Alamat `image+0x…` di `crash.log` bisa dicari di `pes17.map`, dan fungsi guest bernama `sub_XXXXXXXX`.
 
 Untuk build lokal: `DEVKITPRO=/opt/devkitpro PES17_SWITCH_VULKAN_SDK=<sdk>/switch/portlibs bash build-switch.sh`.

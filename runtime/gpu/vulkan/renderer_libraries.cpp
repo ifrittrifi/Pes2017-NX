@@ -215,12 +215,13 @@ namespace
         std::mutex lock;
         std::condition_variable work, done;
         std::deque<Job> jobs;
+        std::deque<Job> urgent;                  // wanted by a draw now: built even in play
         std::unordered_set<uint64_t> known;      // every shader queued or built
         std::unordered_set<uint64_t> busy;       // being compiled now
         std::unordered_map<uint64_t, Shader> ready;
         std::vector<std::thread> workers;
         bool running = false, stopped = false;
-        uint64_t handed = 0, compiled = 0, taken = 0, waited = 0, stolen = 0;
+        uint64_t handed = 0, compiled = 0, taken = 0, waited = 0, stolen = 0, asyncQueued = 0;
         uint64_t compileMicroseconds = 0, waitMicroseconds = 0;
         uint64_t compiledInPlay = 0;
         int64_t drainedAt = 0;
@@ -234,11 +235,20 @@ namespace
         while (true)
         {
             p.work.wait_for(lock, kRecheck,
-                            [] { return (!p.jobs.empty() && !Playing()) || !p.running; });
+                            [] { return !p.urgent.empty() || (!p.jobs.empty() && !Playing()) || !p.running; });
             if (!p.running) return;
-            if (p.jobs.empty() || Playing()) continue;
-            Preparing::Job job = std::move(p.jobs.front());
-            p.jobs.pop_front();
+            Preparing::Job job;
+            if (!p.urgent.empty())
+            {
+                job = std::move(p.urgent.front());
+                p.urgent.pop_front();
+            }
+            else
+            {
+                if (p.jobs.empty() || Playing()) continue;
+                job = std::move(p.jobs.front());
+                p.jobs.pop_front();
+            }
             p.busy.insert(job.hash);
             lock.unlock();
             const auto from = std::chrono::steady_clock::now();
@@ -324,6 +334,46 @@ namespace vk::renderer::detail
         }
         if (vk::pipeline::PipelineLibraries()) entry.library = ShaderLibrary(type, entry.module);
         return entry;
+    }
+
+    // A shader a draw wants that is not built yet, built off the draw's thread: false
+    // while it is still being made (the draw is skipped for that frame -- the object
+    // appears a frame or a few late, instead of the whole game stopping for the
+    // compile), true with it in `out` once a worker has it ready.
+    bool ShaderReadyOrQueued(shader::Type type, uint64_t hash, const uint32_t* code, size_t words, Shader& out)
+    {
+        std::unique_lock lock(p.lock);
+        auto found = p.ready.find(hash);
+        if (found != p.ready.end())
+        {
+            out = std::move(found->second);
+            p.ready.erase(found);
+            p.taken++;
+            return true;
+        }
+        if (!p.running) return false;
+        if (p.busy.count(hash)) return false;
+        for (const Preparing::Job& job : p.urgent)
+            if (job.hash == hash) return false;
+        for (auto job = p.jobs.begin(); job != p.jobs.end(); ++job)
+            if (job->hash == hash)
+            {
+                p.urgent.push_back(std::move(*job));
+                p.jobs.erase(job);
+                p.work.notify_one();
+                return false;
+            }
+        p.known.insert(hash);
+        p.urgent.push_back({ type, hash, std::vector<uint32_t>(code, code + words) });
+        p.asyncQueued++;
+        p.work.notify_one();
+        return false;
+    }
+
+    bool ShadersAsync()
+    {
+        static const bool sync = env::Flag("PES17_SYNC_SHADERS");
+        return !sync && g.asyncShaders && p.running;
     }
 
     bool TakePrepared(uint64_t hash, Shader& out)

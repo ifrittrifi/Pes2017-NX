@@ -259,6 +259,12 @@ namespace vk::renderer::detail
                 target.depthClearedIn = g.frames;
                 continue;
             }
+            {
+                static std::atomic<int> told{ 0 };
+                if (told.fetch_add(1, std::memory_order_relaxed) < 40)
+                    LOGI("clears: whole depth image: tile %u pitch %u samples %u format %u, %ux%u, up to tile %u",
+                         key.baseTile, key.pitch, key.samples, key.format, target.width, target.height, endTile);
+            }
             const VkImageAspectFlags aspect =
                 VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             RecordBarrier(target.image, aspect,
@@ -311,6 +317,12 @@ namespace vk::renderer::detail
             if (g_dumpDraws) LOGW("DUMP   stencil of the %ux depth image at tile %u cleared to %u along with the clear's own image", unsigned(target.samples), baseTile, value);
             if (!ended) { EndPass(); ended = true; span = BeginTimedSpan(); }
             if (ClearRows(target, RowsReached(key, target, endTile), false, 0.0f, true, value, true)) continue;
+            {
+                static std::atomic<int> told{ 0 };
+                if (told.fetch_add(1, std::memory_order_relaxed) < 40)
+                    LOGI("clears: whole stencil image: tile %u pitch %u samples %u format %u, %ux%u, up to tile %u",
+                         key.baseTile, key.pitch, key.samples, key.format, target.width, target.height, endTile);
+            }
             const VkImageAspectFlags both = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             RecordBarrier(target.image, both,
                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
@@ -352,6 +364,12 @@ namespace vk::renderer::detail
             if (target.depth || key.baseTile != tile || !target.image) continue;
             if (!ended) { EndPass(); ended = true; span = BeginTimedSpan(); }
             if (ClearRows(target, RowsReached(key, target, endTile), true, 0.0f, false, 0)) continue;
+            {
+                static std::atomic<int> told{ 0 };
+                if (told.fetch_add(1, std::memory_order_relaxed) < 40)
+                    LOGI("clears: whole colour image: tile %u pitch %u samples %u format %u, %ux%u, up to tile %u",
+                         key.baseTile, key.pitch, key.samples, key.format, target.width, target.height, endTile);
+            }
             const VkClearColorValue value{};
             const VkImageSubresourceRange range{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
             RecordBarrier(target.image, VK_IMAGE_ASPECT_COLOR_BIT,

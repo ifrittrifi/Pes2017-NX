@@ -69,7 +69,7 @@ namespace
 
 void crash::Install()
 {
-    LOGI("crash: Switch fault handler active (runtime/switch/exception.cpp); a crash is written to sdmc:/switch/PES2017/crash.log");
+    LOGI("crash: Switch fault handler active (runtime/switch/exception.cpp); a crash is written to sdmc:/switch/pes2017/crash.log");
 }
 
 void crash::RegisterThread(const char* name)

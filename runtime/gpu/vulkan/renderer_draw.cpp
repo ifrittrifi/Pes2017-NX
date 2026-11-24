@@ -82,7 +82,7 @@ namespace vk::renderer::detail
     bool g_dumpImagesNow = false;
 
     // PES17_DUMP_AT_WORLD_SECONDS=<n>: one frame's draws logged (and the frame and its
-    // targets written to sdmc:/switch/PES2017/dump) once the world has been drawn for n
+    // targets written to sdmc:/switch/pes2017/dump) once the world has been drawn for n
     // seconds without a break -- a moment of the match, with no one at the files.
     bool DumpRequested()
     {

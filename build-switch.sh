@@ -10,7 +10,7 @@
 #     executable it was made from; pes/default.xex is optional)
 #
 # No game assets or generated title-specific PPC files are uploaded by this
-# script. The output is build-switch/pes17.nro.
+# script. The output is build-switch/pes2017.nro.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,9 +57,9 @@ if [[ "$BUILD_TARGET" != "configure" ]]; then
 fi
 
 if [[ "$BUILD_TARGET" == "pes17" ]]; then
-  test -s "$BUILD_DIR/pes17.nro" || fail "CMake completed but pes17.nro was not produced"
-  printf '\nSwitch NRO ready: %s\n' "$BUILD_DIR/pes17.nro"
-  sha256sum "$BUILD_DIR/pes17.nro"
+  test -s "$BUILD_DIR/pes2017.nro" || fail "CMake completed but pes2017.nro was not produced"
+  printf '\nSwitch NRO ready: %s\n' "$BUILD_DIR/pes2017.nro"
+  sha256sum "$BUILD_DIR/pes2017.nro"
 else
   printf '\nSwitch build stage ready: %s\n' "$BUILD_TARGET"
 fi

@@ -71,7 +71,7 @@ namespace
 
     void Write(const std::string& text)
     {
-        if (FILE* f = std::fopen("sdmc:/switch/PES2017/profile.txt", "a"))
+        if (FILE* f = std::fopen("sdmc:/switch/pes2017/profile.txt", "a"))
         {
             std::fwrite(text.data(), 1, text.size(), f);
             std::fclose(f);

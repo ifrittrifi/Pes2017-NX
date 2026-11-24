@@ -542,6 +542,7 @@ bool vk::renderer::Initialise()
          g.shadowBase ? " and a shadow of guest memory behind it" : ", no shadow of guest memory");
     StartPreparing();
     PrewarmFromCache();
+    g.asyncShaders = true;
     // A lost device ends the run, the way closing the window does.
     vk::pipeline::OnDeviceLost(crash::RequestExit);
     vk::record::Start();

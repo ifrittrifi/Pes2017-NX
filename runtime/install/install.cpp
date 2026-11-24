@@ -49,7 +49,7 @@ namespace
 #ifdef __SWITCH__
         // The NRO is launched from the Switch Home Menu, not from a POSIX
         // executable path. platform::Initialise mounts SDMC before this runs.
-        return fs::path("sdmc:/switch/PES2017");
+        return fs::path("sdmc:/switch/pes2017");
 #else
         std::error_code ec;
         return fs::read_symlink("/proc/self/exe", ec).parent_path();
@@ -160,7 +160,7 @@ bool install::Prepare(int, char**, Launch& launch, int& exitCode)
     if (StartLauncher()) { exitCode = 0; return false; }
 #ifdef __SWITCH__
     ShowError("PES 2017 is not installed. Place the verified game files in "
-              "sdmc:/switch/PES2017/game/ and launch again. The Switch build "
+              "sdmc:/switch/pes2017/game/ and launch again. The Switch build "
               "does not include the desktop installer.");
 #else
     ShowError(std::string("The game is not installed here, and ") + kLauncher +

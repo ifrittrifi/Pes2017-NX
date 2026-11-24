@@ -1,6 +1,7 @@
 // Translated shaders, the pipelines built from them, and the shader cache that
 // rebuilds a previous run's pipelines before the title asks for them.
 #include "renderer_state.h"
+#include <cstring>
 #include "../internal.h"
 #include "../../diagnostics.h"
 #include "../../log.h"
@@ -46,7 +47,17 @@ namespace vk::renderer::detail
         }
 
         Shader entry;
-        if (!TakePrepared(hash, entry))
+        if (ShadersAsync())
+        {
+            // Built on a compiler thread; until it is, this draw is skipped (PES17_SYNC_SHADERS=1
+            // compiles at the draw instead, stopping the frame for it).
+            if (!ShaderReadyOrQueued(type, hash, code, words, entry))
+            {
+                g.shadersPending++;
+                return nullptr;
+            }
+        }
+        else if (!TakePrepared(hash, entry))
         {
             stutters::Timed timed(stutters::kShaders);
             const auto translateStart = std::chrono::steady_clock::now();
@@ -740,7 +751,7 @@ namespace vk::renderer::detail
 #ifdef __SWITCH__
             // NVK compiles on the console's CPU: the shaders and pipelines a run met are
             // rebuilt at the next start-up instead of in the middle of a match.
-            if (!asked || !asked[0]) return "sdmc:/switch/PES2017/shader_cache.bin";
+            if (!asked || !asked[0]) return "sdmc:/switch/pes2017/shader/shader_cache.bin";
 #endif
             return asked;
         }();
@@ -759,6 +770,82 @@ namespace vk::renderer::detail
     // wait (g_shaderCacheDirty) for the pause flush or the shutdown's.
     namespace { bool g_shaderCacheDirty = false; }
 
+    // The files are written on a thread of their own: two of them, one 2-3 MB, to the SD
+    // card every 30 s while a match meets new pipelines was a hitch on the thread that draws
+    // (and the driver's blob is serialised there too). The draw thread only copies the
+    // shader list into memory; the newest copy waiting replaces an older one.
+    namespace cachewriter
+    {
+        std::mutex mutex;
+        std::condition_variable wake;
+        std::vector<uint8_t> pending;
+        std::string pendingPath;
+        bool have = false, started = false;
+
+        void Write(const std::vector<uint8_t>& blob, const std::string& path, uint32_t shaders, uint32_t pipelines)
+        {
+            const std::string tmpPath = path + ".tmp";
+            std::FILE* file = std::fopen(tmpPath.c_str(), "wb");
+            if (!file) return;
+            bool writeOk = std::fwrite(blob.data(), 1, blob.size(), file) == blob.size();
+            if (std::fclose(file) != 0) writeOk = false;
+            if (!writeOk)
+            {
+                LOGW("renderer: failed writing shader cache, removing temporary file");
+                std::remove(tmpPath.c_str());
+                return;
+            }
+#ifdef __SWITCH__
+            // Horizon's rename does not replace an existing file.
+            std::remove(path.c_str());
+#endif
+            if (std::rename(tmpPath.c_str(), path.c_str()) == 0)
+                LOGI("renderer: wrote %u shaders and %u pipelines to %s", shaders, pipelines, path.c_str());
+            else
+            {
+                LOGW("renderer: failed to commit shader cache to %s", path.c_str());
+                std::remove(tmpPath.c_str());
+            }
+        }
+
+        void Run()
+        {
+            platform::LowerThreadPriority();
+            platform::SetThreadAffinity(platform::ThreadAffinityRole::WorkerCore);
+            for (;;)
+            {
+                std::vector<uint8_t> blob;
+                std::string path;
+                {
+                    std::unique_lock lock(mutex);
+                    wake.wait(lock, [] { return have; });
+                    blob.swap(pending);
+                    path = pendingPath;
+                    have = false;
+                }
+                uint32_t header[4]{};
+                std::memcpy(header, blob.data(), std::min(blob.size(), sizeof header));
+                Write(blob, path, header[2], header[3]);
+                // The driver's persistent pipeline cache alongside the recipes.
+                vk::pipeline::SaveCache();
+            }
+        }
+
+        void Queue(std::vector<uint8_t>&& blob, const char* path)
+        {
+            std::lock_guard lock(mutex);
+            pending = std::move(blob);
+            pendingPath = path;
+            have = true;
+            if (!started)
+            {
+                started = true;
+                std::thread(Run).detach();
+            }
+            wake.notify_one();
+        }
+    }
+
     void WriteShaderCache(bool force)
     {
         const char* path = ShaderCachePath();
@@ -768,66 +855,31 @@ namespace vk::renderer::detail
         if (!force && now - lastWrite < std::chrono::seconds(30)) { g_shaderCacheDirty = true; return; }
         lastWrite = now;
         g_shaderCacheDirty = false;
-        const std::string tmpPath = std::string(path) + ".tmp";
-        std::FILE* file = std::fopen(tmpPath.c_str(), "wb");
-        if (!file) return;
 
-        bool writeOk = true;
+        std::vector<uint8_t> blob;
+        const auto put = [&blob](const void* data, size_t bytes) {
+            const uint8_t* at = static_cast<const uint8_t*>(data);
+            blob.insert(blob.end(), at, at + bytes);
+        };
         const uint32_t header[4] = { kCacheMagic, kCacheVersion,
                                      uint32_t(g.shaders.size()), uint32_t(g.recorded.size()) };
-        if (std::fwrite(header, sizeof header, 1, file) != 1) writeOk = false;
+        put(header, sizeof header);
         for (const auto& [hash, shader] : g.shaders)
         {
-            if (!writeOk) break;
             const uint32_t entry[2] = { uint32_t(shader.type == shader::Type::Pixel),
                                         uint32_t(shader.code.size()) };
-            if (std::fwrite(&hash, sizeof hash, 1, file) != 1 ||
-                std::fwrite(entry, sizeof entry, 1, file) != 1 ||
-                (shader.code.size() && std::fwrite(shader.code.data(), 4, shader.code.size(), file) != shader.code.size()))
-            {
-                writeOk = false;
-                break;
-            }
+            put(&hash, sizeof hash);
+            put(entry, sizeof entry);
+            if (shader.code.size()) put(shader.code.data(), shader.code.size() * 4);
         }
-        if (writeOk && !g.recorded.empty())
-        {
-            if (std::fwrite(g.recorded.data(), sizeof(Recorded), g.recorded.size(), file) != g.recorded.size())
-                writeOk = false;
-        }
-
-        if (std::fclose(file) != 0) writeOk = false;
-
-        if (writeOk)
-        {
-#ifdef __SWITCH__
-            // Horizon's rename does not replace an existing file.
-            std::remove(path);
-#endif
-            if (std::rename(tmpPath.c_str(), path) == 0)
-            {
-                LOGI("renderer: wrote %zu shaders and %zu pipelines to %s",
-                     g.shaders.size(), g.recorded.size(), path);
-            }
-            else
-            {
-                LOGW("renderer: failed to commit shader cache to %s", path);
-                std::remove(tmpPath.c_str());
-            }
-        }
-        else
-        {
-            LOGW("renderer: failed writing shader cache, removing temporary file");
-            std::remove(tmpPath.c_str());
-        }
-
-        // Commit driver's persistent pipeline cache alongside recipes
-        vk::pipeline::SaveCache();
+        put(g.recorded.data(), g.recorded.size() * sizeof(Recorded));
+        cachewriter::Queue(std::move(blob), path);
     }
 
     void FlushShaderCache()
     {
+        // Both files go out on the cache writer's thread (WriteShaderCache), not this one.
         if (g_shaderCacheDirty) WriteShaderCache(true);
-        vk::pipeline::FlushCache();
     }
 
     // Work the draw path would otherwise do mid-frame, which is where a hitch

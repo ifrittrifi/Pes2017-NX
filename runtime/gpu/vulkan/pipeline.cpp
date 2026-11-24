@@ -264,7 +264,7 @@ namespace
         }
 #ifdef __SWITCH__
         // NVK compiles on the CPU at Tegra X1 speed: keep the pipelines between runs.
-        pathStr = "sdmc:/switch/PES2017/pipeline_cache.bin";
+        pathStr = "sdmc:/switch/pes2017/shader/pipeline_cache.bin";
         return pathStr.c_str();
 #else
         return nullptr;
@@ -412,6 +412,9 @@ namespace
         std::memcpy(header.pipelineCacheUUID, g.deviceProperties.pipelineCacheUUID, VK_UUID_SIZE);
         header.dataSize = size;
 
+        // Two threads save it (the cache writer and the warmup worker): one file write at a time.
+        static std::mutex fileMutex;
+        std::lock_guard fileLock(fileMutex);
         std::string tmpPath = std::string(path) + ".tmp";
         if (std::FILE* f = std::fopen(tmpPath.c_str(), "wb"))
         {
