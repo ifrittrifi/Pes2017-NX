@@ -69,10 +69,11 @@ jobs:
           echo "id=$(docker image inspect --format '{{.Id}}' devkitpro/devkita64:latest)" >> "$GITHUB_OUTPUT"
 
       - name: Restore build cache
-        uses: actions/cache@v4
+        id: cache
+        uses: actions/cache/restore@v4
         with:
           path: build-switch
-          key: nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-${{ hashFiles('runtime/**', 'switch/**', 'third_party/ffmpeg-xenia/**', 'CMakeLists.txt') }}
+          key: nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-${{ github.run_id }}
           restore-keys: |
             nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-
 
@@ -97,6 +98,20 @@ jobs:
           python3 -c 'f=open("pes17.nro","rb"); f.seek(0x10); assert f.read(4)==b"NRO0", "bad NRO header"'
           ls -lh pes17.nro pes17.map
           sha256sum pes17.nro
+
+      - name: Give the build directory back to the runner user
+        if: always()
+        shell: bash
+        run: sudo chown -R "$(id -u):$(id -g)" build-switch 2>/dev/null || true
+
+      # Saved even when the runtime fails to build, so the 1.5 hours of PPC
+      # objects are not compiled again on the next run.
+      - name: Save build cache
+        if: always() && steps.cache.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: build-switch
+          key: nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-${{ github.run_id }}
 
       - name: Upload
         uses: actions/upload-artifact@v4
