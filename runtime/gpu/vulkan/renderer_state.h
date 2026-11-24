@@ -401,6 +401,7 @@ namespace vk::renderer::detail
         };
         uint64_t clearedPixels = 0;           // samples cleared outside passes since the last perf line
         uint64_t imageClears = 0;
+        uint64_t regionPixels = 0;            // of clearedPixels, those of clears over part of an image
         PassTiming passTiming[kFrameSlots];
         bool timingOn = false;
         float timestampPeriod = 1.0f;         // ns a tick
@@ -743,7 +744,7 @@ namespace vk::renderer::detail
     void EndReadingColour(Target& target);
     VkImage BeginReadingDepth(Target& target, VkOffset2D at, uint32_t width, uint32_t height);
     void EndReadingDepth(Target& target);
-    void ClearAliasedStencil(const Target& except, uint32_t baseTile, uint32_t value);
+    void ClearAliasedStencil(const Target& except, uint32_t baseTile, uint32_t value, uint32_t endTile = 2048);
     void ClearAliasedDepth(uint32_t fromTile, uint32_t endTile, float depth, bool clearStencil = true, uint32_t stencilValue = 0);
     void ClearAliasedColour(uint32_t tile, uint32_t endTile = 2048);
     void ClearAfterResolve(const gpu::RegisterFile& r, const gpu::CopyControl& control);

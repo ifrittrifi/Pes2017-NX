@@ -316,6 +316,11 @@ bool vk::renderer::Initialise()
         if (!vk::pipeline::GetDeviceProperties(&props, sizeof(props)))
         { LOGW("renderer: device properties are unavailable"); RollbackInitialise(); return false; }
         g.timestampPeriod = props.limits.timestampPeriod;
+#ifdef __SWITCH__
+        // The driver says 1 ns a tick, but against the CPU's clock the GPU's timestamps run at
+        // 0.61 of real time (measured, test 5): ticks of the 19.2 MHz clock read as 31.25 ns ones.
+        if (!env::Flag("PES17_RAW_TIMESTAMPS")) g.timestampPeriod *= 31.25f / 19.2f;
+#endif
         bool wanted = env::Flag("PES17_GPU_TIMING");
         g.timingReport = wanted;
         // The load rule reads the passes' times, so it needs them taken.

@@ -906,7 +906,19 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
             LOGW("DUMP   clearing rectangle with stencil replace: tile %u, wmask %02X, %d other depth image(s) at the tile", depthInfo.BaseTile(), clearRef.WriteMask(), others);
         }
         if ((clearRef.WriteMask() & 0xFF) == 0xFF)
-            ClearAliasedStencil(*depthTarget, depthInfo.BaseTile(), clearRef.Reference());
+        {
+            // How many EDRAM tiles the rectangle covers, from its own corners (as for the
+            // depth-only clear), so the other images are cleared over those rows only.
+            uint32_t stencilEnd = 2048, rectX = 0, rectY = 0;
+            if (ClearRectangleReach(r, call, rectX, rectY) && rectX && rectY)
+            {
+                const uint32_t samples = surface.MsaaSamples();
+                const uint32_t columns = std::max(rectX, surface.Pitch()) * (samples >= 2 ? 2u : 1u);
+                const uint32_t rows = rectY * (samples >= 1 ? 2u : 1u);
+                stencilEnd = std::min(2048u, depthInfo.BaseTile() + ((columns + 79u) / 80u) * ((rows + 15u) / 16u));
+            }
+            ClearAliasedStencil(*depthTarget, depthInfo.BaseTile(), clearRef.Reference(), stencilEnd);
+        }
     }
 
     // Both keys carry the surface's sample count, so the two agree unless a

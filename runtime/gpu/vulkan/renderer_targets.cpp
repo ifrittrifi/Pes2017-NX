@@ -175,7 +175,8 @@ namespace vk::renderer::detail
     // load-clear (dynamic rendering). A whole-image transfer clear of a 2048-row
     // 4x surface is ten million samples, and PES 2017 clears three of them twice
     // a frame for the 720 rows it uses: 15 ms of a 307 MHz GPU.
-    bool ClearRows(Target& target, uint32_t rows, bool colour, float depth, bool clearStencil, uint32_t stencilValue)
+    bool ClearRows(Target& target, uint32_t rows, bool colour, float depth, bool clearStencil, uint32_t stencilValue,
+                   bool keepDepth = false)
     {
         if (!rows || !target.view || vk::pipeline::LegacyMode() || !dispatch.beginRendering || !dispatch.endRendering)
             return false;
@@ -212,6 +213,7 @@ namespace vk::renderer::detail
                 attachment.clearValue.depthStencil = { d, stencilValue };
                 stencil = attachment;
                 if (!clearStencil) stencil.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+                if (keepDepth) attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
                 info.pDepthAttachment = &attachment;
                 info.pStencilAttachment = &stencil;
             }
@@ -228,6 +230,7 @@ namespace vk::renderer::detail
         });
         g.imageClears++;
         g.clearedPixels += uint64_t(area.extent.width) * area.extent.height * uint64_t(target.samples);
+        g.regionPixels += uint64_t(area.extent.width) * area.extent.height * uint64_t(target.samples);
         return true;
     }
 
@@ -298,7 +301,7 @@ namespace vk::renderer::detail
     // through the 4x one, and its sprites test the stencil for EQUAL 1 -- with the marks left in the 1x
     // image they failed wherever there was crowd behind them (a half-time board with the crowd drawn
     // through its text).
-    void ClearAliasedStencil(const Target& except, uint32_t baseTile, uint32_t value)
+    void ClearAliasedStencil(const Target& except, uint32_t baseTile, uint32_t value, uint32_t endTile)
     {
         bool ended = false;
         uint32_t span = ~0u;
@@ -307,6 +310,7 @@ namespace vk::renderer::detail
             if (!target.depth || key.baseTile != baseTile || target.image == except.image) continue;
             if (g_dumpDraws) LOGW("DUMP   stencil of the %ux depth image at tile %u cleared to %u along with the clear's own image", unsigned(target.samples), baseTile, value);
             if (!ended) { EndPass(); ended = true; span = BeginTimedSpan(); }
+            if (ClearRows(target, RowsReached(key, target, endTile), false, 0.0f, true, value, true)) continue;
             const VkImageAspectFlags both = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             RecordBarrier(target.image, both,
                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,

@@ -291,9 +291,10 @@ namespace vk::renderer::detail
             // and the clears made outside any pass (whole images), against the passes above.
             const double shown = double(std::max<uint64_t>(g.frames - firstFrame, 1));
             LOGW("gpu: per frame shown: %.2f submissions, %.2f ms of GPU time in them, %.2f ms of it in %.1f image clears"
-                 " (%.1f Msamples); %.2f ms of pass time",
+                 " (%.1f Msamples, %.1f of them over part of an image); %.2f ms of pass time",
                  submissions / shown, submissionNs / shown / 1e6, clearNs / shown / 1e6, clearSpans / shown,
-                 double(g.clearedPixels) / shown / 1e6, frameNs / shown / 1e6);
+                 double(g.clearedPixels) / shown / 1e6, double(g.regionPixels) / shown / 1e6, frameNs / shown / 1e6);
+            g.regionPixels = 0;
             LOGW("gpu: one submission's end to the next: %.2f ms (its own work %.2f ms; the rest is uploads, the"
                  " window's copy and idle time)", paces ? paceNs / paces / 1e6 : 0.0,
                  submissions ? submissionNs / submissions / 1e6 : 0.0);
