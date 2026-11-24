@@ -836,14 +836,36 @@ namespace vk::renderer::detail
 
         void Queue(std::vector<uint8_t>&& blob, const char* path)
         {
+            // On its own thread unless PES17_CACHE_THREAD=0 (then written in place, as before).
+            static const bool threaded = [] {
+                const char* value = env::Text("PES17_CACHE_THREAD");
+                return !(value && value[0] == '0');
+            }();
+            if (!threaded)
+            {
+                uint32_t header[4]{};
+                std::memcpy(header, blob.data(), std::min(blob.size(), sizeof header));
+                Write(blob, path, header[2], header[3]);
+                vk::pipeline::SaveCache();
+                return;
+            }
             std::lock_guard lock(mutex);
             pending = std::move(blob);
             pendingPath = path;
             have = true;
             if (!started)
             {
-                started = true;
-                std::thread(Run).detach();
+                // The runtime's own thread start: std::thread from the ring consumer threw
+                // std::system_error on the console, and the throw ended the game (tests 7-9).
+                started = platform::StartThread([](void*) { Run(); }, nullptr, 256 * 1024, "cache writer");
+                if (!started)
+                {
+                    have = false;
+                    uint32_t header[4]{};
+                    std::memcpy(header, pending.data(), std::min(pending.size(), sizeof header));
+                    Write(pending, pendingPath, header[2], header[3]);
+                    return;
+                }
             }
             wake.notify_one();
         }
