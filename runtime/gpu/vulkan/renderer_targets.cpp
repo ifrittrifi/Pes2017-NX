@@ -154,6 +154,83 @@ namespace vk::renderer::detail
     // the images it names, and the rectangles themselves are not drawn. It is not
     // a model of EDRAM, but it is what this particular idiom means.
 
+    // How many of a target's rows the EDRAM tiles fromTile..endTile reach, in the
+    // surface's own pixels: a tile is 80x16 samples, and 4x doubles both sides of a
+    // pixel, 2x its height. 0 means all of them (the reach is not known, or it is
+    // the whole image anyway). Counted at 32 bits a sample, which for a 64-bit
+    // colour surface reaches further than the console's clear does, never less.
+    uint32_t RowsReached(const TargetKey& key, const Target& target, uint32_t endTile)
+    {
+        static const bool whole = env::Flag("PES17_WHOLE_CLEARS");
+        if (whole || endTile >= 2048 || endTile <= key.baseTile || !key.pitch) return 0;
+        const uint32_t columns = key.samples >= 2 ? 40u : 80u;
+        const uint32_t rowsPerTile = key.samples >= 1 ? 8u : 16u;
+        const uint32_t tilesPerRow = (key.pitch + columns - 1) / columns;
+        const uint32_t tileRows = (endTile - key.baseTile + tilesPerRow - 1) / tilesPerRow;
+        const uint32_t rows = tileRows * rowsPerTile + 8;
+        return rows >= target.height ? 0 : rows;
+    }
+
+    // A clear of the top `rows` rows only, as a render pass that does nothing but
+    // load-clear (dynamic rendering). A whole-image transfer clear of a 2048-row
+    // 4x surface is ten million samples, and PES 2017 clears three of them twice
+    // a frame for the 720 rows it uses: 15 ms of a 307 MHz GPU.
+    bool ClearRows(Target& target, uint32_t rows, bool colour, float depth, bool clearStencil, uint32_t stencilValue)
+    {
+        if (!rows || !target.view || vk::pipeline::LegacyMode() || !dispatch.beginRendering || !dispatch.endRendering)
+            return false;
+        const VkImageView view = target.view;
+        const VkRect2D area{ { 0, 0 }, { HostOf(target.width, target.scale),
+                                         std::min(HostOf(rows, target.scale) + 1, HostOf(target.height, target.scale)) } };
+        const float d = std::clamp(depth, 0.0f, 1.0f);
+        Record([=](VkCommandBuffer command) {
+            VkMemoryBarrier before{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+            before.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_TRANSFER_WRITE_BIT;
+            before.dstAccessMask = kColourAccess | kDepthAccess;
+            vkCmdPipelineBarrier(command, kColourStages | kDepthStages | VK_PIPELINE_STAGE_TRANSFER_BIT |
+                                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                 kColourStages | kDepthStages, 0, 1, &before, 0, nullptr, 0, nullptr);
+            VkRenderingAttachmentInfoKHR attachment{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR };
+            attachment.imageView = view;
+            attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            VkRenderingInfoKHR info{ VK_STRUCTURE_TYPE_RENDERING_INFO_KHR };
+            info.renderArea = area;
+            info.layerCount = 1;
+            VkRenderingAttachmentInfoKHR stencil = attachment;
+            if (colour)
+            {
+                attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                attachment.clearValue.color = VkClearColorValue{};
+                info.colorAttachmentCount = 1;
+                info.pColorAttachments = &attachment;
+            }
+            else
+            {
+                attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                attachment.clearValue.depthStencil = { d, stencilValue };
+                stencil = attachment;
+                if (!clearStencil) stencil.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+                info.pDepthAttachment = &attachment;
+                info.pStencilAttachment = &stencil;
+            }
+            dispatch.beginRendering(command, &info);
+            dispatch.endRendering(command);
+            VkMemoryBarrier after{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+            after.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            after.dstAccessMask = kColourAccess | kDepthAccess | VK_ACCESS_TRANSFER_READ_BIT |
+                                  VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(command, kColourStages | kDepthStages,
+                                 kColourStages | kDepthStages | VK_PIPELINE_STAGE_TRANSFER_BIT |
+                                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                 0, 1, &after, 0, nullptr, 0, nullptr);
+        });
+        g.imageClears++;
+        g.clearedPixels += uint64_t(area.extent.width) * area.extent.height * uint64_t(target.samples);
+        return true;
+    }
+
     void ClearAliasedDepth(uint32_t fromTile, uint32_t endTile, float depth, bool clearStencil, uint32_t stencilValue)
     {
         bool ended = false;
@@ -173,6 +250,12 @@ namespace vk::renderer::detail
             // several times a frame for nothing.
             if (target.clearedAtDraw == g.drawsRecorded) continue;
             if (!ended) { EndPass(); ended = true; span = BeginTimedSpan(); }
+            if (ClearRows(target, RowsReached(key, target, endTile), false, depth, clearStencil, stencilValue))
+            {
+                target.clearedAtDraw = g.drawsRecorded;
+                target.depthClearedIn = g.frames;
+                continue;
+            }
             const VkImageAspectFlags aspect =
                 VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             RecordBarrier(target.image, aspect,
@@ -256,7 +339,7 @@ namespace vk::renderer::detail
     // depth are images of their own, so the colour ones at the tile are cleared
     // too. Only for a zero clear: the bytes of any other depth value read as a
     // colour would need the format's packing worked out.
-    void ClearAliasedColour(uint32_t tile)
+    void ClearAliasedColour(uint32_t tile, uint32_t endTile)
     {
         bool ended = false;
         uint32_t span = ~0u;
@@ -264,6 +347,7 @@ namespace vk::renderer::detail
         {
             if (target.depth || key.baseTile != tile || !target.image) continue;
             if (!ended) { EndPass(); ended = true; span = BeginTimedSpan(); }
+            if (ClearRows(target, RowsReached(key, target, endTile), true, 0.0f, false, 0)) continue;
             const VkClearColorValue value{};
             const VkImageSubresourceRange range{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
             RecordBarrier(target.image, VK_IMAGE_ASPECT_COLOR_BIT,

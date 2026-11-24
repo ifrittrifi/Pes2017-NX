@@ -1,3 +1,4 @@
+#include <atomic>
 #include "input.h"
 #include "settings.h"
 
@@ -42,6 +43,9 @@ bool switch_input::Initialize()
     return true;
 }
 
+namespace { std::atomic<bool> g_dumpCombo{ false }; }
+bool switch_input::DumpComboHeld() { return g_dumpCombo.load(std::memory_order_relaxed); }
+
 switch_input::State switch_input::Poll()
 {
     State out{};
@@ -49,6 +53,9 @@ switch_input::State switch_input::Poll()
 
     padUpdate(&g_pad);
     const u64 raw = padGetButtons(&g_pad);
+    g_dumpCombo.store((raw & (HidNpadButton_StickL | HidNpadButton_StickR)) ==
+                          (HidNpadButton_StickL | HidNpadButton_StickR),
+                      std::memory_order_relaxed);
     const HidAnalogStickState left = padGetStickPos(&g_pad, 0);
     const HidAnalogStickState right = padGetStickPos(&g_pad, 1);
 

@@ -47,4 +47,6 @@ namespace switch_input
     bool MainLoop();
     // Poll once per frame, after appletMainLoop() succeeds.
     State Poll();
+    // Both sticks pressed in at once, as of the last Poll: the frame-dump trigger.
+    bool DumpComboHeld();
 }

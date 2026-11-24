@@ -66,7 +66,7 @@ namespace vk::renderer::detail
     // begin and end inside one of those, and their counts are summed. The pool
     // is a ring, so brackets whose counts are not in yet keep theirs.
     constexpr uint32_t kMaxGuestQueries = 64;
-    constexpr uint32_t kGuestQueryRing = 4 * kMaxGuestQueries;
+    constexpr uint32_t kGuestQueryRing = 64 * kMaxGuestQueries;
 
     // A tile of EDRAM is one surface however the title declares it, so the key
     // holds the host format: 8_8_8_8 and its gamma twin are one image, which is
@@ -745,7 +745,7 @@ namespace vk::renderer::detail
     void EndReadingDepth(Target& target);
     void ClearAliasedStencil(const Target& except, uint32_t baseTile, uint32_t value);
     void ClearAliasedDepth(uint32_t fromTile, uint32_t endTile, float depth, bool clearStencil = true, uint32_t stencilValue = 0);
-    void ClearAliasedColour(uint32_t tile);
+    void ClearAliasedColour(uint32_t tile, uint32_t endTile = 2048);
     void ClearAfterResolve(const gpu::RegisterFile& r, const gpu::CopyControl& control);
 
     // Traditional render pass and framebuffer fallback for Vulkan 1.1 / Mali
@@ -856,6 +856,7 @@ namespace vk::renderer::detail
     const char* ShaderCachePath();
     void WriteShaderCache(bool force = false);
     void CollectPassTimings(uint32_t slot);
+    void ReportWaits(uint64_t frames);
     uint32_t BeginTimedSpan();
     void EndTimedSpan(uint32_t index);
     uint32_t PassTimingKey(uint32_t width, uint32_t height, uint32_t samples, bool depth);

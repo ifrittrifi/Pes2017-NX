@@ -8,6 +8,9 @@
 #include "../../kernel/physical.h"
 #include "../../log.h"
 #include "../../env.h"
+#ifdef __SWITCH__
+#include "../../../switch/source/input.h"
+#endif
 #include "../internal.h"
 #include "../xe/memexport.h"
 #include <atomic>
@@ -83,6 +86,24 @@ namespace vk::renderer::detail
     // seconds without a break -- a moment of the match, with no one at the files.
     bool DumpRequested()
     {
+#ifdef __SWITCH__
+        // L3+R3 (both sticks pressed in) during a match: one frame, at most one every 10 s.
+        {
+            static auto lastCombo = std::chrono::steady_clock::time_point{};
+            static int combos = 0;
+            if (switch_input::DumpComboHeld() && combos < 3)
+            {
+                const auto now = std::chrono::steady_clock::now();
+                if (lastCombo == std::chrono::steady_clock::time_point{} || now - lastCombo > std::chrono::seconds(10))
+                {
+                    lastCombo = now;
+                    combos++;
+                    LOGW("DUMP asked for with L3+R3");
+                    return true;
+                }
+            }
+        }
+#endif
         static const double after = env::Real("PES17_DUMP_AT_WORLD_SECONDS", 0.0);
         static bool done = false;
         if (after <= 0.0 || done || g.worldStreak < 30) return false;
@@ -759,7 +780,7 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
             ClearAliasedDepth(depthInfo.BaseTile(), endTile, depth, writesStencil, stencilRef.Reference());
         }
         if (std::abs(depth) < 1e-6f && (r[gpu::RB_STENCILREFMASK] & 0xFF) == 0)
-            ClearAliasedColour(depthInfo.BaseTile());
+            ClearAliasedColour(depthInfo.BaseTile(), endTile);
         Skip("EDRAM depth clear");
         return;
     }

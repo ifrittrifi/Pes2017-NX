@@ -72,14 +72,13 @@ namespace vk::renderer::detail
     {
         static const char* dir = [] {
             if (const char* asked = env::Text("PES17_DUMP_FRAMES")) return asked;
-            if (env::Real("PES17_DUMP_AT_WORLD_SECONDS", 0.0) > 0.0)
-            {
 #ifdef __SWITCH__
-                mkdir("sdmc:/switch/PES2017/dump", 0777);
-                return "sdmc:/switch/PES2017/dump";
-#endif
-            }
+            // The L3+R3 dump (renderer_draw.cpp DumpRequested) writes here.
+            mkdir("sdmc:/switch/PES2017/dump", 0777);
+            return "sdmc:/switch/PES2017/dump";
+#else
             return static_cast<const char*>(nullptr);
+#endif
         }();
         return dir;
     }

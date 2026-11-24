@@ -383,9 +383,48 @@ namespace vk::renderer::detail
         return true;
     }
 
+    // What the render thread waited for the GPU over, and how long: a wait for the
+    // slot three submissions back is the GPU being the bottleneck; any other is the
+    // CPU and the GPU taking turns.
+    struct WaitReason { const char* what = nullptr; uint64_t ns = 0, count = 0, behind = 0; };
+    WaitReason g_waitReasons[8];
+
+    void ReportWaits(uint64_t frames)
+    {
+        std::string line;
+        char item[160];
+        for (WaitReason& reason : g_waitReasons)
+        {
+            if (!reason.what || !reason.count) continue;
+            std::snprintf(item, sizeof item, " [%s: %.2f ms in %.2f waits a frame, %.1f submissions behind]",
+                          reason.what, reason.ns / 1e6 / double(std::max<uint64_t>(frames, 1)),
+                          reason.count / double(std::max<uint64_t>(frames, 1)), reason.behind / double(reason.count));
+            line += item;
+            reason.ns = reason.count = reason.behind = 0;
+        }
+        LOGI("perf: render thread waits for the GPU:%s", line.empty() ? " none" : line.c_str());
+    }
+
     bool WaitForSlot(State::Slot& slot, const char* what)
     {
         if (!slot.inFlight) return true;
+        const auto waitFrom = std::chrono::steady_clock::now();
+        const uint64_t behind = g.submissionSerial - slot.serial;
+        struct Note
+        {
+            const char* what; uint64_t behind; std::chrono::steady_clock::time_point from;
+            ~Note()
+            {
+                const uint64_t ns = uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - from).count());
+                for (WaitReason& reason : g_waitReasons)
+                    if (reason.what == what || !reason.what)
+                    {
+                        reason.what = what; reason.ns += ns; reason.count++; reason.behind += behind;
+                        break;
+                    }
+            }
+        } note{ what, behind, waitFrom };
         Stopwatch waited(g.fenceNanoseconds);
         stutters::Timed timed(stutters::kGpuWaits);
         vk::record::WaitFor(slot.queuedAt);
