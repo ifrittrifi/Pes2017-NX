@@ -1,12 +1,11 @@
-name: Build Switch NRO
+name: Build Switch NRO (full rebuild, manual)
 
 # Builds pes2017.nro from the tree (source + ppc/) with devkitA64 and the pinned
 # BO2 Mesa Horizon SDK. Runs after "Apply source ZIP" and on demand.
+# Manual only: the build that runs by itself after "Apply source ZIP" is
+# build-nro-skip-cache.yml, which keeps the compiled PPC objects.
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Apply source ZIP"]
-    types: [completed]
 
 permissions:
   contents: read
