@@ -41,6 +41,9 @@ std::string vk::PresenterReport() { return "presenter: none (headless build)\n";
 
 #include "capture.h"
 #ifdef __SWITCH__
+namespace switch_clocks { void Describe(char* out, size_t size); }
+#endif
+#ifdef __SWITCH__
 #include "../../switch/guest_memory_nx.h"
 #endif
 #include "pipeline.h"
@@ -755,8 +758,12 @@ namespace
 #ifdef __SWITCH__
             static uint32_t reports = 0;
             if (++reports % 20 == 0)
-                LOGI("memory: guest %zu MB committed, %zu MB mapped; fps %u", guest_nx::CommittedBytes() >> 20,
-                     guest_nx::MappedBytes() >> 20, g_counter.shown);
+            {
+                char clocks[128];
+                switch_clocks::Describe(clocks, sizeof clocks);
+                LOGI("memory: guest %zu MB committed, %zu MB mapped; fps %u; %s", guest_nx::CommittedBytes() >> 20,
+                     guest_nx::MappedBytes() >> 20, g_counter.shown, clocks);
+            }
 #endif
         }
         if (!frame.counter && !CreateCounter(frame)) return;

@@ -734,7 +734,16 @@ namespace vk::renderer::detail
     // place that state exists.
     const char* ShaderCachePath()
     {
-        static const char* path = env::Text("PES17_SHADER_CACHE");
+        static const char* path = [] {
+            const char* asked = env::Text("PES17_SHADER_CACHE");
+            if (asked && asked[0] == '0' && !asked[1]) return static_cast<const char*>(nullptr);
+#ifdef __SWITCH__
+            // NVK compiles on the console's CPU: the shaders and pipelines a run met are
+            // rebuilt at the next start-up instead of in the middle of a match.
+            if (!asked || !asked[0]) return "sdmc:/switch/PES2017/shader_cache.bin";
+#endif
+            return asked;
+        }();
         return path;
     }
 
@@ -790,6 +799,10 @@ namespace vk::renderer::detail
 
         if (writeOk)
         {
+#ifdef __SWITCH__
+            // Horizon's rename does not replace an existing file.
+            std::remove(path);
+#endif
             if (std::rename(tmpPath.c_str(), path) == 0)
             {
                 LOGI("renderer: wrote %zu shaders and %zu pipelines to %s",

@@ -385,12 +385,22 @@ namespace vk::renderer::detail
         // two timestamps a pass, per frame slot, read back when the slot is
         // reused. On when files/gpu_timing exists; off, none of it is recorded.
         static constexpr uint32_t kTimedPasses = 128;
+        // After the passes' stamps: the submission's own first and last stamp, then
+        // spans of work outside the passes (clears), two stamps each.
+        static constexpr uint32_t kTimedSpans = 64;
+        static constexpr uint32_t kSubmissionStamp = 2 * kTimedPasses;
+        static constexpr uint32_t kSpanStamp = kSubmissionStamp + 2;
+        static constexpr uint32_t kTimingQueries = kSpanStamp + 2 * kTimedSpans;
         struct PassTiming
         {
             VkQueryPool pool = VK_NULL_HANDLE;
             uint32_t count = 0;               // passes stamped this frame
             uint32_t key[kTimedPasses]{};     // what each was: size, samples, depth
+            bool submissionStamped = false;   // both submission stamps recorded
+            uint32_t spans = 0;               // clear spans stamped
         };
+        uint64_t clearedPixels = 0;           // samples cleared outside passes since the last perf line
+        uint64_t imageClears = 0;
         PassTiming passTiming[kFrameSlots];
         bool timingOn = false;
         float timestampPeriod = 1.0f;         // ns a tick
@@ -579,6 +589,7 @@ namespace vk::renderer::detail
     // Debug: only draws numbered lo..hi of each frame are drawn (files/draw_range holds "lo hi").
     extern uint32_t g_drawLo, g_drawHi, g_frameDraw;
     extern bool g_dumpHeaders;       // CAPTURE burst: one 'DUMP draw' line per draw, nothing else
+    extern bool g_dumpImagesNow;     // the full dump just ended: write its frame and targets
     extern bool g_noWriteBackCap;    // files/no_writeback_cap: debug A/B for the blinking ball
     extern bool g_noVertexReuse;     // files/no_vertex_reuse: debug A/B for the flicker
     // A signature of `bytes` of the guest memory at physical `address`, from 256 words spread
@@ -845,6 +856,8 @@ namespace vk::renderer::detail
     const char* ShaderCachePath();
     void WriteShaderCache(bool force = false);
     void CollectPassTimings(uint32_t slot);
+    uint32_t BeginTimedSpan();
+    void EndTimedSpan(uint32_t index);
     uint32_t PassTimingKey(uint32_t width, uint32_t height, uint32_t samples, bool depth);
     void FlushShaderCache();
     void PrewarmFromCache();
@@ -892,7 +905,7 @@ namespace vk::renderer::detail
     // because a frame read back has to be waited for.
     struct FrameReadBacks
     {
-        bool dump = false, keep = false, probe = false;
+        bool dump = false, keep = false, probe = false, dumpAll = false;
         bool Any() const { return dump || keep || probe; }
     };
     // The black-frame probe (`files/black_probe`, which a CAPTURE creates): every presented frame is read

@@ -63,8 +63,13 @@ namespace vk::renderer::detail
         {
             const VkQueryPool timestamps = g.passTiming[g.slot].pool;
             g.passTiming[g.slot].count = 0;
+            g.passTiming[g.slot].spans = 0;
+            g.passTiming[g.slot].submissionStamped = true;
             Record([=](VkCommandBuffer command) {
-                vkCmdResetQueryPool(command, timestamps, 0, 2 * State::kTimedPasses);
+                vkCmdResetQueryPool(command, timestamps, 0, State::kTimingQueries);
+                // When everything before this submission is done: its own work starts here.
+                vkCmdWriteTimestamp(command, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestamps,
+                                    State::kSubmissionStamp);
             });
         }
         g.arenaUsed = 0;
@@ -203,6 +208,34 @@ namespace vk::renderer::detail
         State::PassTiming& timing = g.passTiming[slotIndex];
         static std::map<uint32_t, std::pair<double, uint32_t>> totals;   // key -> ns, passes
         static double frameNs = 0; static uint32_t frames = 0, passes = 0;
+        static double submissionNs = 0, clearNs = 0; static uint32_t submissions = 0, clearSpans = 0;
+        static uint64_t firstFrame = g.frames;
+        if (timing.pool && timing.submissionStamped)
+        {
+            uint64_t span[2]{};
+            if (vkGetQueryPoolResults(g.device, timing.pool, State::kSubmissionStamp, 2, sizeof span, span,
+                                      sizeof(uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
+                span[1] >= span[0])
+            {
+                submissionNs += double(span[1] - span[0]) * g.timestampPeriod;
+                submissions++;
+            }
+            const uint32_t n = std::min(timing.spans, State::kTimedSpans);
+            if (n)
+            {
+                uint64_t ticks[2 * State::kTimedSpans];
+                if (vkGetQueryPoolResults(g.device, timing.pool, State::kSpanStamp, 2 * n, sizeof(uint64_t) * 2 * n,
+                                          ticks, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS)
+                    for (uint32_t i = 0; i < n; i++)
+                        if (ticks[2 * i + 1] >= ticks[2 * i])
+                        {
+                            clearNs += double(ticks[2 * i + 1] - ticks[2 * i]) * g.timestampPeriod;
+                            clearSpans++;
+                        }
+            }
+            timing.submissionStamped = false;
+            timing.spans = 0;
+        }
         if (timing.count && timing.pool)
         {
             uint64_t ticks[2 * State::kTimedPasses];
@@ -229,6 +262,7 @@ namespace vk::renderer::detail
         {
             // Collected for the dynamic scale and not to be logged.
             totals.clear(); frameNs = 0; frames = 0; passes = 0;
+            submissionNs = clearNs = 0; submissions = clearSpans = 0; firstFrame = g.frames;
         }
         else if (frames >= 600)
         {
@@ -236,6 +270,15 @@ namespace vk::renderer::detail
             std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.second.first > b.second.first; });
             LOGW("gpu: %u frames, %.1f passes and %.2f ms of pass time a frame (the passes' own clock, not the frame's)",
                  frames, double(passes) / frames, frameNs / frames / 1e6);
+            // Per frame presented: the GPU's whole time from each submission's start to its end,
+            // and the clears made outside any pass (whole images), against the passes above.
+            const double shown = double(std::max<uint64_t>(g.frames - firstFrame, 1));
+            LOGW("gpu: per frame shown: %.2f submissions, %.2f ms of GPU time in them, %.2f ms of it in %.1f image clears"
+                 " (%.1f Msamples); %.2f ms of pass time",
+                 submissions / shown, submissionNs / shown / 1e6, clearNs / shown / 1e6, clearSpans / shown,
+                 double(g.clearedPixels) / shown / 1e6, frameNs / shown / 1e6);
+            submissionNs = clearNs = 0; submissions = clearSpans = 0; firstFrame = g.frames;
+            g.clearedPixels = 0; g.imageClears = 0;
             for (size_t i = 0; i < rows.size() && i < 8; i++)
             {
                 const uint32_t key = rows[i].first;
@@ -246,6 +289,30 @@ namespace vk::renderer::detail
             }
             totals.clear(); frameNs = 0; frames = 0; passes = 0;
         }
+    }
+
+    // Work outside the passes, timed like a pass: BOTTOM_OF_PIPE both ends, so the first
+    // stamp waits for everything before it and the span is this work's own.
+    uint32_t BeginTimedSpan()
+    {
+        if (!g.timingOn || !g.recording) return ~0u;
+        State::PassTiming& timing = g.passTiming[g.slot];
+        if (!timing.pool || !timing.submissionStamped || timing.spans >= State::kTimedSpans) return ~0u;
+        const uint32_t index = timing.spans++;
+        const VkQueryPool pool = timing.pool;
+        Record([=](VkCommandBuffer command) {
+            vkCmdWriteTimestamp(command, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, pool, State::kSpanStamp + 2 * index);
+        });
+        return index;
+    }
+
+    void EndTimedSpan(uint32_t index)
+    {
+        if (index == ~0u || !g.timingOn) return;
+        const VkQueryPool pool = g.passTiming[g.slot].pool;
+        Record([=](VkCommandBuffer command) {
+            vkCmdWriteTimestamp(command, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, pool, State::kSpanStamp + 2 * index + 1);
+        });
     }
 
     // `wait` when the CPU is about to read what the submission produced -- a
@@ -276,7 +343,12 @@ namespace vk::renderer::detail
         const VkDevice device = g.device;
         const VkQueue queue = g.queue;
         const VkFence fence = slot.fence;
+        const VkQueryPool stamps = (g.timingOn && g.passTiming[g.slot].submissionStamped)
+                                       ? g.passTiming[g.slot].pool : VK_NULL_HANDLE;
         Record([=, buffers = std::move(buffers)](VkCommandBuffer command) {
+            if (stamps)
+                vkCmdWriteTimestamp(command, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, stamps,
+                                    State::kSubmissionStamp + 1);
             const bool ended = vkEndCommandBuffer(command) == VK_SUCCESS;
             if (!ended) LOGW("renderer: a frame's command buffer would not end");
             VkSubmitInfo submit{ VK_STRUCTURE_TYPE_SUBMIT_INFO };

@@ -170,6 +170,9 @@ void platform::Initialise()
     }
     profiler_nx::Start();
 
+    // The console's capture button: homebrew starts with it refused.
+    appletSetScreenShotPermission(AppletScreenShotPermission_Enable);
+
     // Input remains usable even when the SD card is absent or cannot mount.
     switch_input::Initialize();
 }
@@ -333,4 +336,37 @@ void* platform::Symbol(void* library, const char* name)
     (void)library;
     (void)name;
     return nullptr;
+}
+
+// For the periodic log line: docked or handheld, and the clocks the system holds the
+// CPU, GPU and memory at (what the frame rate is bounded by, without sys-clk).
+namespace switch_clocks
+{
+    void Describe(char* out, size_t size)
+    {
+        static bool tried = false, have = false;
+        if (!tried)
+        {
+            tried = true;
+            have = R_SUCCEEDED(clkrstInitialize());
+        }
+        uint32_t hz[3]{};
+        if (have)
+        {
+            const PcvModuleId modules[3] = { PcvModuleId_CpuBus, PcvModuleId_GPU, PcvModuleId_EMC };
+            for (int i = 0; i < 3; i++)
+            {
+                ClkrstSession session{};
+                if (R_SUCCEEDED(clkrstOpenSession(&session, modules[i], 3)))
+                {
+                    u32 rate = 0;
+                    if (R_SUCCEEDED(clkrstGetClockRate(&session, &rate))) hz[i] = rate;
+                    clkrstCloseSession(&session);
+                }
+            }
+        }
+        const char* mode = appletGetOperationMode() == AppletOperationMode_Console ? "docked" : "handheld";
+        std::snprintf(out, size, "%s, cpu %u MHz, gpu %u MHz, memory %u MHz", mode,
+                      hz[0] / 1000000u, hz[1] / 1000000u, hz[2] / 1000000u);
+    }
 }

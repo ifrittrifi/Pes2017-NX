@@ -324,7 +324,7 @@ bool vk::renderer::Initialise()
         {
             VkQueryPoolCreateInfo timestamps{ VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
             timestamps.queryType = VK_QUERY_TYPE_TIMESTAMP;
-            timestamps.queryCount = 2 * State::kTimedPasses;
+            timestamps.queryCount = State::kTimingQueries;
             g.timingOn = true;
             for (auto& timing : g.passTiming)
                 if (vkCreateQueryPool(g.device, &timestamps, nullptr, &timing.pool) != VK_SUCCESS)

@@ -70,7 +70,17 @@ namespace vk::renderer::detail
     // is no window, and the only way to compare two runs.
     const char* FrameDumpDirectory()
     {
-        static const char* dir = env::Text("PES17_DUMP_FRAMES");
+        static const char* dir = [] {
+            if (const char* asked = env::Text("PES17_DUMP_FRAMES")) return asked;
+            if (env::Real("PES17_DUMP_AT_WORLD_SECONDS", 0.0) > 0.0)
+            {
+#ifdef __SWITCH__
+                mkdir("sdmc:/switch/PES2017/dump", 0777);
+                return "sdmc:/switch/PES2017/dump";
+#endif
+            }
+            return static_cast<const char*>(nullptr);
+        }();
         return dir;
     }
 
@@ -841,8 +851,11 @@ namespace vk::renderer::detail
         // The frame and target dumps (PES17_DUMP_FRAMES, PES17_DUMP_TARGETS) are in
         // every build, read with env:: -- a null check a frame until the switch is set.
         FrameReadBacks plan;
-        plan.dump = FrameDumpDirectory() && ((g.frames + 1) % FrameDumpEvery()) == 0 &&
+        plan.dump = env::Text("PES17_DUMP_FRAMES") && ((g.frames + 1) % FrameDumpEvery()) == 0 &&
                     FrameDumpDue();
+        plan.dumpAll = g_dumpImagesNow && FrameDumpDirectory();
+        g_dumpImagesNow = false;
+        if (plan.dumpAll) plan.dump = true;
         plan.keep = FlashFramesKept() > 0;
         plan.probe = BlackProbeOn() || BlackGuardOn();
         return plan;
@@ -880,12 +893,13 @@ namespace vk::renderer::detail
 
         static const bool onlyWorld = env::Flag("PES17_DUMP_WORLD_FRAMES");
         static const bool targetsToo = env::Flag("PES17_DUMP_TARGETS");
-        if (plan.dump && !frame.empty() && (!onlyWorld || worldDrawn))
+        if (plan.dump && !frame.empty() && (plan.dumpAll || !onlyWorld || worldDrawn))
         {
             char name[64];
             std::snprintf(name, sizeof name, "frame_%06llu", (unsigned long long)g.frames);
             WriteDump(name, frame.data(), g.presentWidth, g.presentHeight);
-            if (targetsToo) DumpTargets();
+            if (targetsToo || plan.dumpAll) DumpTargets();
+            LOGW("DUMP images written to %s", FrameDumpDirectory());
         }
         if (plan.keep && !frame.empty())
             KeepFlashFrame(std::move(frame), g.presentWidth, g.presentHeight, g.frames);

@@ -76,9 +76,20 @@ namespace vk::renderer::detail
     bool g_dumpHeaders = false;
     uint32_t g_dumpIndex = 0;
 
+    bool g_dumpImagesNow = false;
+
+    // PES17_DUMP_AT_WORLD_SECONDS=<n>: one frame's draws logged (and the frame and its
+    // targets written to sdmc:/switch/PES2017/dump) once the world has been drawn for n
+    // seconds without a break -- a moment of the match, with no one at the files.
     bool DumpRequested()
     {
-        return false;
+        static const double after = env::Real("PES17_DUMP_AT_WORLD_SECONDS", 0.0);
+        static bool done = false;
+        if (after <= 0.0 || done || g.worldStreak < 30) return false;
+        if (std::chrono::duration<double>(std::chrono::steady_clock::now() - g.streakFrom).count() < after)
+            return false;
+        done = true;
+        return true;
     }
 
     // How far a clearing rectangle really reaches, in the surface's pixels: its own

@@ -157,6 +157,7 @@ namespace vk::renderer::detail
     void ClearAliasedDepth(uint32_t fromTile, uint32_t endTile, float depth, bool clearStencil, uint32_t stencilValue)
     {
         bool ended = false;
+        uint32_t span = ~0u;
         for (auto& [key, target] : g.targets)
         {
             // Only the surfaces that start inside the tiles the rectangle covers.
@@ -171,7 +172,7 @@ namespace vk::renderer::detail
             // clears before it draws, so without this every target is cleared
             // several times a frame for nothing.
             if (target.clearedAtDraw == g.drawsRecorded) continue;
-            if (!ended) { EndPass(); ended = true; }
+            if (!ended) { EndPass(); ended = true; span = BeginTimedSpan(); }
             const VkImageAspectFlags aspect =
                 VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             RecordBarrier(target.image, aspect,
@@ -195,6 +196,8 @@ namespace vk::renderer::detail
                 vkCmdClearDepthStencilImage(command, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                             &value, 1, &range);
             });
+            g.imageClears++;
+            g.clearedPixels += uint64_t(HostOf(target.width, target.scale)) * HostOf(target.height, target.scale) * uint64_t(target.samples);
             RecordBarrier(target.image, aspect,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
@@ -203,6 +206,7 @@ namespace vk::renderer::detail
             target.clearedAtDraw = g.drawsRecorded;
             target.depthClearedIn = g.frames;
         }
+        EndTimedSpan(span);
     }
 
     // A clearing rectangle that replaces the stencil clears it in every depth image at the same tile, not
@@ -214,11 +218,12 @@ namespace vk::renderer::detail
     void ClearAliasedStencil(const Target& except, uint32_t baseTile, uint32_t value)
     {
         bool ended = false;
+        uint32_t span = ~0u;
         for (auto& [key, target] : g.targets)
         {
             if (!target.depth || key.baseTile != baseTile || target.image == except.image) continue;
             if (g_dumpDraws) LOGW("DUMP   stencil of the %ux depth image at tile %u cleared to %u along with the clear's own image", unsigned(target.samples), baseTile, value);
-            if (!ended) { EndPass(); ended = true; }
+            if (!ended) { EndPass(); ended = true; span = BeginTimedSpan(); }
             const VkImageAspectFlags both = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             RecordBarrier(target.image, both,
                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
@@ -231,12 +236,15 @@ namespace vk::renderer::detail
             Record([=](VkCommandBuffer command) {
                 vkCmdClearDepthStencilImage(command, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
             });
+            g.imageClears++;
+            g.clearedPixels += uint64_t(HostOf(target.width, target.scale)) * HostOf(target.height, target.scale) * uint64_t(target.samples);
             RecordBarrier(target.image, both,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                           VK_ACCESS_TRANSFER_WRITE_BIT, kDepthAccess,
                           VK_PIPELINE_STAGE_TRANSFER_BIT, kDepthStages);
         }
+        EndTimedSpan(span);
     }
 
     // EDRAM holds colour and depth in the same memory, and a surface is named
@@ -251,10 +259,11 @@ namespace vk::renderer::detail
     void ClearAliasedColour(uint32_t tile)
     {
         bool ended = false;
+        uint32_t span = ~0u;
         for (auto& [key, target] : g.targets)
         {
             if (target.depth || key.baseTile != tile || !target.image) continue;
-            if (!ended) { EndPass(); ended = true; }
+            if (!ended) { EndPass(); ended = true; span = BeginTimedSpan(); }
             const VkClearColorValue value{};
             const VkImageSubresourceRange range{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
             RecordBarrier(target.image, VK_IMAGE_ASPECT_COLOR_BIT,
@@ -265,11 +274,14 @@ namespace vk::renderer::detail
             Record([=](VkCommandBuffer command) {
                 vkCmdClearColorImage(command, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &value, 1, &range);
             });
+            g.imageClears++;
+            g.clearedPixels += uint64_t(HostOf(target.width, target.scale)) * HostOf(target.height, target.scale) * uint64_t(target.samples);
             RecordBarrier(target.image, VK_IMAGE_ASPECT_COLOR_BIT,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                           VK_ACCESS_TRANSFER_WRITE_BIT, kColourAccess,
                           VK_PIPELINE_STAGE_TRANSFER_BIT, kColourStages);
         }
+        EndTimedSpan(span);
     }
 
     Target* FindTarget(const TargetKey& key)

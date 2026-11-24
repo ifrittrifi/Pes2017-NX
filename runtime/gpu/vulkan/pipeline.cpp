@@ -418,6 +418,10 @@ namespace
             const size_t writtenHdr = std::fwrite(&header, sizeof(header), 1, f);
             const size_t writtenData = std::fwrite(data.data(), 1, size, f);
             const int closed = std::fclose(f);
+#ifdef __SWITCH__
+            // Horizon's rename does not replace an existing file.
+            if (writtenHdr == 1 && writtenData == size && closed == 0) std::remove(path);
+#endif
             if (writtenHdr == 1 && writtenData == size && closed == 0 && std::rename(tmpPath.c_str(), path) == 0)
             {
                 LOGI("pipeline: wrote verified %zu KB pipeline cache to %s", (size + sizeof(header)) / 1024, path);

@@ -865,6 +865,7 @@ void vk::renderer::Swap(uint32_t frontBuffer)
             {
                 vk::renderer::detail::SnapshotForSamples();
                 samplesDue = true;
+                vk::renderer::detail::g_dumpImagesNow = true;
             }
             LOGW("DUMP frame ends");
         }
