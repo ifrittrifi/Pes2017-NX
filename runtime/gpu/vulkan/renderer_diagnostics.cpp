@@ -141,10 +141,17 @@ namespace vk::renderer::detail
         std::fprintf(file, "P6\n%u %u\n255\n", width, height);
         const size_t pixels = size_t(width) * height;
         size_t lit = 0;
-        for (size_t i = 0; i < pixels; i++)
+        // A row at a time: three bytes a call is a million writes to an SD card.
+        std::vector<uint8_t> row(size_t(width) * 3);
+        for (uint32_t y = 0; y < height; y++)
         {
-            std::fwrite(rgba + i * 4, 1, 3, file);
-            lit += (rgba[i * 4] || rgba[i * 4 + 1] || rgba[i * 4 + 2]);
+            for (uint32_t x = 0; x < width; x++)
+            {
+                const uint8_t* p = rgba + (size_t(y) * width + x) * 4;
+                row[x * 3] = p[0]; row[x * 3 + 1] = p[1]; row[x * 3 + 2] = p[2];
+                lit += (p[0] || p[1] || p[2]);
+            }
+            std::fwrite(row.data(), 1, row.size(), file);
         }
         std::fclose(file);
         LOGI("renderer: wrote %s (%zu%% of pixels not black)", path, pixels ? lit * 100 / pixels : 0);
@@ -897,7 +904,12 @@ namespace vk::renderer::detail
             char name[64];
             std::snprintf(name, sizeof name, "frame_%06llu", (unsigned long long)g.frames);
             WriteDump(name, frame.data(), g.presentWidth, g.presentHeight);
+#ifdef __SWITCH__
+            // The target read-backs hung the console after the frame (test 3): the frame alone.
+            if (targetsToo) DumpTargets();
+#else
             if (targetsToo || plan.dumpAll) DumpTargets();
+#endif
             LOGW("DUMP images written to %s", FrameDumpDirectory());
         }
         if (plan.keep && !frame.empty())

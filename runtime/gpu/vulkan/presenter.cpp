@@ -43,6 +43,11 @@ std::string vk::PresenterReport() { return "presenter: none (headless build)\n";
 #ifdef __SWITCH__
 namespace switch_clocks { void Describe(char* out, size_t size); }
 #endif
+namespace
+{
+    // Time the window thread spends in the present (holding the queue) and the acquire.
+    std::atomic<uint64_t> g_presentNs{ 0 }, g_acquireNs{ 0 }, g_presents{ 0 };
+}
 #ifdef __SWITCH__
 #include "../../switch/guest_memory_nx.h"
 #endif
@@ -424,6 +429,27 @@ namespace
             }
         }
         info.presentMode = VK_PRESENT_MODE_FIFO_KHR;      // always supported
+        {
+            // MAILBOX when the surface has it: the newest frame replaces a waiting one and the
+            // queue never holds for the display (no tearing). PES17_PRESENT_FIFO=1 keeps FIFO.
+            uint32_t count = 0;
+            VkPresentModeKHR modes[8]{};
+            if (vkGetPhysicalDeviceSurfacePresentModesKHR(PhysicalHandle(), g.surface, &count, nullptr) == VK_SUCCESS)
+            {
+                count = std::min<uint32_t>(count, 8);
+                vkGetPhysicalDeviceSurfacePresentModesKHR(PhysicalHandle(), g.surface, &count, modes);
+                std::string list;
+                bool mailbox = false;
+                for (uint32_t i = 0; i < count; i++)
+                {
+                    list += ' ' + std::to_string(int(modes[i]));
+                    mailbox |= modes[i] == VK_PRESENT_MODE_MAILBOX_KHR;
+                }
+                if (mailbox && !env::Flag("PES17_PRESENT_FIFO")) info.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+                LOGI("vulkan: present modes%s; using %s", list.c_str(),
+                     info.presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "MAILBOX" : "FIFO");
+            }
+        }
         info.clipped = VK_TRUE;
         // The one being replaced, if any, so the driver can carry over what it
         // can; it is destroyed once the new one exists.
@@ -761,8 +787,10 @@ namespace
             {
                 char clocks[128];
                 switch_clocks::Describe(clocks, sizeof clocks);
-                LOGI("memory: guest %zu MB committed, %zu MB mapped; fps %u; %s", guest_nx::CommittedBytes() >> 20,
-                     guest_nx::MappedBytes() >> 20, g_counter.shown, clocks);
+                const uint64_t presents = std::max<uint64_t>(g_presents.exchange(0), 1);
+                LOGI("memory: guest %zu MB committed, %zu MB mapped; fps %u; %s; present %.2f ms, acquire %.2f ms each",
+                     guest_nx::CommittedBytes() >> 20, guest_nx::MappedBytes() >> 20, g_counter.shown, clocks,
+                     g_presentNs.exchange(0) / 1e6 / presents, g_acquireNs.exchange(0) / 1e6 / presents);
             }
 #endif
         }
@@ -945,8 +973,11 @@ namespace
         // FIFO: this is where the window waits for the display, with the
         // frame it will show still in the queue, so the queue's length is
         // how far the renderer is ahead of the screen.
+        const auto acquireFrom = std::chrono::steady_clock::now();
         VkResult acquired = vkAcquireNextImageKHR(DeviceHandle(), g.swapchain, UINT64_MAX,
                                                   frame.acquired, VK_NULL_HANDLE, &imageIndex);
+        g_acquireNs.fetch_add(uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - acquireFrom).count()), std::memory_order_relaxed);
         // Out of date: nothing was acquired, and the semaphore is untouched;
         // remade next frame. Suboptimal: an image was acquired and is shown,
         // since the semaphore it signals has to be waited on, and then remade.
@@ -1087,7 +1118,12 @@ namespace
         // device is a failure.
         const VkResult presented = [&] {
             std::lock_guard queueLock(vk::pipeline::QueueMutex());
-            return vkQueuePresentKHR(QueueHandle(), &present);
+            const auto from = std::chrono::steady_clock::now();
+            const VkResult result = vkQueuePresentKHR(QueueHandle(), &present);
+            g_presentNs.fetch_add(uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - from).count()), std::memory_order_relaxed);
+            g_presents.fetch_add(1, std::memory_order_relaxed);
+            return result;
         }();
         if (presented == VK_ERROR_OUT_OF_DATE_KHR ||
             (presented == VK_SUBOPTIMAL_KHR && !g.suboptimalIsExpected))

@@ -209,6 +209,7 @@ namespace vk::renderer::detail
         static std::map<uint32_t, std::pair<double, uint32_t>> totals;   // key -> ns, passes
         static double frameNs = 0; static uint32_t frames = 0, passes = 0;
         static double submissionNs = 0, clearNs = 0; static uint32_t submissions = 0, clearSpans = 0;
+        static uint64_t lastEnd = 0; static double paceNs = 0; static uint32_t paces = 0;
         static uint64_t firstFrame = g.frames;
         if (timing.pool && timing.submissionStamped)
         {
@@ -219,6 +220,14 @@ namespace vk::renderer::detail
             {
                 submissionNs += double(span[1] - span[0]) * g.timestampPeriod;
                 submissions++;
+                // From the end of the submission before to the end of this one: the GPU's whole
+                // pace, uploads, the window's copy and any time it sat idle included.
+                if (lastEnd && span[1] > lastEnd && span[1] - lastEnd < 2000000000ull)
+                {
+                    paceNs += double(span[1] - lastEnd) * g.timestampPeriod;
+                    paces++;
+                }
+                lastEnd = span[1];
             }
             const uint32_t n = std::min(timing.spans, State::kTimedSpans);
             if (n)
@@ -277,6 +286,10 @@ namespace vk::renderer::detail
                  " (%.1f Msamples); %.2f ms of pass time",
                  submissions / shown, submissionNs / shown / 1e6, clearNs / shown / 1e6, clearSpans / shown,
                  double(g.clearedPixels) / shown / 1e6, frameNs / shown / 1e6);
+            LOGW("gpu: one submission's end to the next: %.2f ms (its own work %.2f ms; the rest is uploads, the"
+                 " window's copy and idle time)", paces ? paceNs / paces / 1e6 : 0.0,
+                 submissions ? submissionNs / submissions / 1e6 : 0.0);
+            paceNs = 0; paces = 0;
             submissionNs = clearNs = 0; submissions = clearSpans = 0; firstFrame = g.frames;
             g.clearedPixels = 0; g.imageClears = 0;
             for (size_t i = 0; i < rows.size() && i < 8; i++)

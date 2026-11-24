@@ -855,7 +855,13 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
     const bool uiSprite = call.pixelHash == 0xB401ACD7DE3D19F7ull && uiStencilDumps < 6 && uiStencilDumps++ >= 0;
     const bool crowdShader = uiSprite || call.pixelHash == 0xB4BBEAC4E75DDB31ull || call.pixelHash == 0x70F64A42C2C649AAull ||
                              call.pixelHash == 0xD0C7E9595FC160B9ull;
+#ifdef __SWITCH__
+    // A stencil read-back in the middle of the frame left every draw after it without a
+    // command buffer on the console (test 3): not done here.
+    if (false)
+#else
     if (g_dumpDraws && ((depthState.StencilEnable() && depthState.StencilFunc() == 2) || crowdShader) && depthTarget->image)
+#endif
     {
         if (g.recording) Submit(true);
         const uint32_t w = HostOf(depthTarget->width, depthTarget->scale);

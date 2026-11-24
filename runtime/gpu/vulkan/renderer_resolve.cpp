@@ -759,11 +759,20 @@ void vk::renderer::Resolve(const gpu::RegisterFile& r)
 
     // In a frame dump, the resolve as it was at this point of the frame, for the crowd's two G-buffers:
     // the same address is resolved to again later, and the end-of-frame images only keep the last.
-    if (g_dumpDraws && !exact && (destination == 0x07EB0000u || destination == 0x08370000u || destination == 0x075D0000u) && into.format == VK_FORMAT_R8G8B8A8_UNORM)
+    // 07230000 is the players' mask the pitch is shaded with, 05E40000 the scene at quarter size.
+    if (g_dumpDraws && !exact && (destination == 0x07EB0000u || destination == 0x08370000u || destination == 0x075D0000u ||
+                                  destination == 0x07230000u || destination == 0x05E40000u) &&
+        into.format == VK_FORMAT_R8G8B8A8_UNORM)
     {
         Submit(true);
         const std::vector<uint8_t> pixels = ReadColourImage(
             into.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, into.width, into.height, 4);
+        if (!pixels.empty() && FrameDumpDirectory())
+        {
+            char name[64];
+            std::snprintf(name, sizeof name, "frame_%06llu_resolve_%08X", (unsigned long long)g.frames, destination);
+            WriteDump(name, pixels.data(), into.width, into.height);
+        }
     }
 
     // (Up to 1024x1024: an unlicensed team's kit pattern is drawn on the GPU at that size and resolved,

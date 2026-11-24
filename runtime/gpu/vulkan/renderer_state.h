@@ -857,6 +857,8 @@ namespace vk::renderer::detail
     void WriteShaderCache(bool force = false);
     void CollectPassTimings(uint32_t slot);
     void ReportWaits(uint64_t frames);
+    void WriteDump(const char* name, const uint8_t* rgba, uint32_t width, uint32_t height);
+    const char* FrameDumpDirectory();
     uint32_t BeginTimedSpan();
     void EndTimedSpan(uint32_t index);
     uint32_t PassTimingKey(uint32_t width, uint32_t height, uint32_t samples, bool depth);
