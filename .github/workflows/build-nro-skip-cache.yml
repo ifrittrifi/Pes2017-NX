@@ -1,6 +1,6 @@
 name: Build Switch NRO
 
-# Builds pes17.nro from the tree (source + ppc/) with devkitA64 and the pinned
+# Builds pes2017.nro from the tree (source + ppc/) with devkitA64 and the pinned
 # BO2 Mesa Horizon SDK. Runs after "Apply source ZIP" and on demand.
 on:
   workflow_dispatch:
@@ -116,13 +116,13 @@ jobs:
               # The PPC archive first, so it is cached even if the runtime fails.
               BUILD_SWITCH_TARGET=ppc_recomp bash ./build-switch.sh 2>&1 | tail -n 40
               bash ./build-switch.sh 2>&1 | grep -E "error|warning: unused|Error|NRO ready|^\[" | grep -v "^\[.*Building CXX object CMakeFiles/ppc_recomp" | tail -n 400
-              test -s build-switch/pes17.nro
+              test -s build-switch/pes2017.nro
               aarch64-none-elf-nm -n -C --defined-only build-switch/pes17 > build-switch/pes17.map
-              cp build-switch/pes17.nro build-switch/pes17.map /work/
+              cp build-switch/pes2017.nro build-switch/pes17.map /work/
             '
-          python3 -c 'f=open("pes17.nro","rb"); f.seek(0x10); assert f.read(4)==b"NRO0", "bad NRO header"'
-          ls -lh pes17.nro pes17.map
-          sha256sum pes17.nro
+          python3 -c 'f=open("pes2017.nro","rb"); f.seek(0x10); assert f.read(4)==b"NRO0", "bad NRO header"'
+          ls -lh pes2017.nro pes17.map
+          sha256sum pes2017.nro
 
       - name: Give the build directory back to the runner user
         if: always()
@@ -146,9 +146,9 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: pes17-nro
+          name: pes2017-nro
           path: |
-            pes17.nro
+            pes2017.nro
             pes17.map
           if-no-files-found: error
           retention-days: 14
