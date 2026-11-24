@@ -134,9 +134,8 @@ namespace
             if (next != s.chunks.end() && next->second.offset < gapEnd) gapEnd = next->second.offset;
 
             const size_t sz = gapEnd - cur;
-            const size_t align = (sz >= guest_nx::kGranule && (cur & (guest_nx::kGranule - 1)) == 0)
-                                     ? guest_nx::kGranule : kPage;
-            void* backing = memalign(align, sz);
+            // 64 KB: a 2 MB alignment asked for holes the heap seldom has.
+            void* backing = memalign(0x10000, sz);
             if (!backing)
             {
                 s.lastResult = 0xFFFF0001u;

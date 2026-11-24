@@ -365,7 +365,14 @@ bool vk::renderer::Initialise()
     // read only with files/vertex_shadow (off, it makes players draw wrong), and cost 512 MB of memory. Before
     // this the arena itself was held to the range, which kept it at 96 MB there and the frame 40% slower.
     // PES17_IGNORE_STORAGE_RANGE=1 skips the check.
-    uint32_t wanted = uint32_t(env::Number("PES17_ARENA_MB", kArenaWanted >> 20)) << 20;
+#ifdef __SWITCH__
+    // A match frame copies ~50 MB at most; 512 MB of the Switch's 3.2 GB went
+    // to this while the title's render targets failed to allocate.
+    constexpr uint32_t kArenaDefault = 256u << 20;
+#else
+    constexpr uint32_t kArenaDefault = kArenaWanted;
+#endif
+    uint32_t wanted = uint32_t(env::Number("PES17_ARENA_MB", kArenaDefault >> 20)) << 20;
     const VkDeviceSize storageRange = env::Flag("PES17_IGNORE_STORAGE_RANGE") ? ~VkDeviceSize(0) : properties.limits.maxStorageBufferRange;
     for (; wanted >= kArenaLeast; wanted /= 2)
     {

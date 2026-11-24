@@ -40,6 +40,9 @@ std::string vk::PresenterReport() { return "presenter: none (headless build)\n";
 #include <vector>
 
 #include "capture.h"
+#ifdef __SWITCH__
+#include "../../switch/guest_memory_nx.h"
+#endif
 #include "pipeline.h"
 #include "renderer.h"
 
@@ -72,6 +75,11 @@ namespace
         VkSemaphore acquired = VK_NULL_HANDLE;
         VkSemaphore rendered = VK_NULL_HANDLE;
         VkFence inFlight = VK_NULL_HANDLE;
+        // The FPS counter's pixels for this slot (host visible; free once the
+        // slot's fence has been waited on).
+        VkBuffer counter = VK_NULL_HANDLE;
+        VkDeviceMemory counterMemory = VK_NULL_HANDLE;
+        uint8_t* counterMapped = nullptr;
     };
 
     struct Presenter
@@ -659,6 +667,152 @@ namespace
 
     // Shows the oldest queued frame, or with `idle` the window's own colour
     // before the renderer has finished any.
+    // ---- FPS counter -------------------------------------------------------
+    // As a8nx64 draws it: green seven-segment digits on a black box at (8, 8),
+    // 12x20 digits with 4-pixel strokes at 720 lines, scaled with the height;
+    // the game's frames counted over half a second. PES17_FPS_COUNTER=0 hides it.
+    constexpr uint32_t kCounterMaxWidth = 256, kCounterMaxHeight = 96;
+    struct CounterState
+    {
+        bool decided = false, on = true;
+        std::chrono::steady_clock::time_point since{};
+        uint32_t frames = 0, shown = 0;
+        uint64_t lastSerial = 0;
+    };
+    CounterState g_counter;
+
+    bool CounterOn()
+    {
+        if (!g_counter.decided)
+        {
+            g_counter.decided = true;
+            const char* value = std::getenv("PES17_FPS_COUNTER");
+#ifdef __SWITCH__
+            g_counter.on = !(value && value[0] == '0');
+#else
+            g_counter.on = value && value[0] == '1';
+#endif
+        }
+        return g_counter.on;
+    }
+
+    // One of the title's frames reached the screen.
+    void CountFrame(uint64_t serial)
+    {
+        if (!serial || serial == g_counter.lastSerial) return;
+        g_counter.lastSerial = serial;
+        g_counter.frames++;
+    }
+
+    void DestroyCounter(Frame& frame)
+    {
+        if (frame.counter) vkDestroyBuffer(DeviceHandle(), frame.counter, nullptr);
+        if (frame.counterMemory) vkFreeMemory(DeviceHandle(), frame.counterMemory, nullptr);
+        frame.counter = VK_NULL_HANDLE;
+        frame.counterMemory = VK_NULL_HANDLE;
+        frame.counterMapped = nullptr;
+    }
+
+    bool CreateCounter(Frame& frame)
+    {
+        VkPhysicalDeviceMemoryProperties memory{};
+        if (!vk::pipeline::GetMemoryProperties(&memory, sizeof(memory))) return false;
+        VkBufferCreateInfo buffer{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+        buffer.size = VkDeviceSize(kCounterMaxWidth) * kCounterMaxHeight * 4;
+        buffer.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        if (vkCreateBuffer(DeviceHandle(), &buffer, nullptr, &frame.counter) != VK_SUCCESS) return false;
+        VkMemoryRequirements needs{};
+        vkGetBufferMemoryRequirements(DeviceHandle(), frame.counter, &needs);
+        VkMemoryAllocateInfo allocate{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+        allocate.allocationSize = needs.size;
+        allocate.memoryTypeIndex = vk::util::FindMemory(memory, needs.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        void* mapped = nullptr;
+        if (allocate.memoryTypeIndex == UINT32_MAX ||
+            vkAllocateMemory(DeviceHandle(), &allocate, nullptr, &frame.counterMemory) != VK_SUCCESS ||
+            vkBindBufferMemory(DeviceHandle(), frame.counter, frame.counterMemory, 0) != VK_SUCCESS ||
+            vkMapMemory(DeviceHandle(), frame.counterMemory, 0, VK_WHOLE_SIZE, 0, &mapped) != VK_SUCCESS)
+        {
+            DestroyCounter(frame);
+            return false;
+        }
+        frame.counterMapped = static_cast<uint8_t*>(mapped);
+        return true;
+    }
+
+    // Over swapchain image `target` (TRANSFER_DST), after everything else.
+    void DrawCounter(Frame& frame, VkImage target)
+    {
+        if (!CounterOn()) return;
+        const auto now = std::chrono::steady_clock::now();
+        if (g_counter.since == std::chrono::steady_clock::time_point{}) g_counter.since = now;
+        const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - g_counter.since).count();
+        if (elapsed >= 500000)
+        {
+            g_counter.shown = uint32_t((uint64_t(g_counter.frames) * 1000000ull + uint64_t(elapsed) / 2) / uint64_t(elapsed));
+            g_counter.frames = 0;
+            g_counter.since = now;
+#ifdef __SWITCH__
+            static uint32_t reports = 0;
+            if (++reports % 20 == 0)
+                LOGI("memory: guest %zu MB committed, %zu MB mapped; fps %u", guest_nx::CommittedBytes() >> 20,
+                     guest_nx::MappedBytes() >> 20, g_counter.shown);
+#endif
+        }
+        if (!frame.counter && !CreateCounter(frame)) return;
+
+        // a8nx64's sizes, in tenths of a pixel per 720 lines.
+        int scale = int((g.extent.height * 10 + 360) / 720);
+        if (scale < 10) scale = 10;
+        const int w = 12 * scale / 10, h = 20 * scale / 10;
+        const int t = std::max(1, 4 * scale / 10), gap = 4 * scale / 10, pad = 3 * scale / 10;
+        const int mid = (h - t) / 2;
+        static const uint8_t kSegments[10] = { 0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f };
+        uint32_t fps = std::min<uint32_t>(g_counter.shown, 999);
+        int digits[3], n = 0;
+        if (fps >= 100) digits[n++] = int(fps / 100);
+        if (fps >= 10) digits[n++] = int(fps / 10 % 10);
+        digits[n++] = int(fps % 10);
+        const int boxW = n * (w + gap) - gap + 2 * pad, boxH = h + 2 * pad;
+        constexpr int kX0 = 8, kY0 = 8;
+        if (boxW > int(kCounterMaxWidth) || boxH > int(kCounterMaxHeight) ||
+            uint32_t(kX0 + boxW) > g.extent.width || uint32_t(kY0 + boxH) > g.extent.height)
+            return;
+
+        // Black box, then green segments. Green is byte 1 in BGRA and RGBA alike.
+        uint8_t* px = frame.counterMapped;
+        for (int i = 0; i < boxW * boxH; ++i) { px[i * 4 + 0] = 0; px[i * 4 + 1] = 0; px[i * 4 + 2] = 0; px[i * 4 + 3] = 255; }
+        auto rect = [&](int x, int y, int rw, int rh)
+        {
+            for (int yy = y; yy < y + rh && yy < boxH; ++yy)
+                for (int xx = x; xx < x + rw && xx < boxW; ++xx)
+                    px[(yy * boxW + xx) * 4 + 1] = 255;
+        };
+        for (int i = 0; i < n; ++i)
+        {
+            const int x = pad + i * (w + gap), y = pad, m = kSegments[digits[i]];
+            if (m & 1)  rect(x, y, w, t);
+            if (m & 2)  rect(x + w - t, y, t, mid + t);
+            if (m & 4)  rect(x + w - t, y + mid, t, h - mid);
+            if (m & 8)  rect(x, y + h - t, w, t);
+            if (m & 16) rect(x, y + mid, t, h - mid);
+            if (m & 32) rect(x, y, t, mid + t);
+            if (m & 64) rect(x, y + mid, w, t);
+        }
+
+        vk::util::Barrier(frame.commands, target, VK_IMAGE_ASPECT_COLOR_BIT,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        VkBufferImageCopy copy{};
+        copy.bufferRowLength = uint32_t(boxW);
+        copy.bufferImageHeight = uint32_t(boxH);
+        copy.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+        copy.imageOffset = { kX0, kY0, 0 };
+        copy.imageExtent = { uint32_t(boxW), uint32_t(boxH), 1 };
+        vkCmdCopyBufferToImage(frame.commands, frame.counter, target, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+    }
+
     void DestroyOverlay()
     {
         auto& o = g.overlay;
@@ -865,6 +1019,8 @@ namespace
     {
         VkImage image = g.images[imageIndex];
         DrawOverlay(frame, image);
+        CountFrame(taken);
+        DrawCounter(frame, image);
 
         vk::util::Barrier(frame.commands, image, VK_IMAGE_ASPECT_COLOR_BIT,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
@@ -1030,6 +1186,7 @@ namespace
                 if (frame.acquired) vkDestroySemaphore(DeviceHandle(), frame.acquired, nullptr);
                 if (frame.rendered) vkDestroySemaphore(DeviceHandle(), frame.rendered, nullptr);
                 if (frame.inFlight) vkDestroyFence(DeviceHandle(), frame.inFlight, nullptr);
+                DestroyCounter(frame);
             }
             if (g.pool) vkDestroyCommandPool(DeviceHandle(), g.pool, nullptr);
             if (g.swapchain) vkDestroySwapchainKHR(DeviceHandle(), g.swapchain, nullptr);

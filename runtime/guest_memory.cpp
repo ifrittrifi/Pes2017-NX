@@ -53,13 +53,10 @@ bool guest::Commit(uint32_t address, uint32_t size)
         LOGE("guest: commit %08X + %08X runs past the 4 GB guest space", address, size);
         return false;
     }
-    if (!guest_nx::CommitWindow(address, size))
-    {
-        LOGE("guest: could not commit %08X + %08X (result 0x%08X; %zu MB committed, %zu MB mapped)",
-             address, size, guest_nx::LastResult(), guest_nx::CommittedBytes() >> 20,
-             guest_nx::MappedBytes() >> 20);
-        return false;
-    }
+    // Backed on first touch, as the Linux reservation is: the fault handler
+    // commits the 2 MB around a touched address. Committing here took every
+    // reservation in full (the title reserves 512 MB of far heap twice) and ran
+    // the heap dry at kick-off.
     return true;
 #else
     // The reservation is already mapped read/write; pages are backed on touch.
