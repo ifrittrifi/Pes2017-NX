@@ -27,6 +27,7 @@ namespace platform
         PerformanceCore, // GPU submit / command recorder / rendering
         WorkerCore,      // Background shader warmup / audio / file I/O
         RenderCore,      // GPU ring consumer / presenter: off the prime core the main thread is on
+        AudioCore,       // audio mixer: must never starve (Switch: the 4th core when granted)
         Default          // OS scheduler default
     };
 

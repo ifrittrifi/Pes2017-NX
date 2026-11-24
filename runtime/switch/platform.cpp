@@ -5,7 +5,9 @@
 #include <switch.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <new>
 
@@ -29,6 +31,62 @@ extern "C"
 
 namespace
 {
+    // Cores the title may run on: the process mask without core 3 (the
+    // system's). A thread created with core -2 is pinned to the process's
+    // default core alone, so every thread used to share core 0.
+    u32 AllowedCores()
+    {
+        static const u32 mask = []
+        {
+            u64 process = 0;
+            if (R_FAILED(svcGetInfo(&process, InfoType_CoreMask, CUR_PROCESS_HANDLE, 0)) || !process)
+                process = 1;
+            const u32 title = u32(process) & 0x7u;
+            return title ? title : u32(process) & 0xFu;
+        }();
+        return mask;
+    }
+
+    int NthCore(unsigned n)
+    {
+        int cores[4];
+        int count = 0;
+        const u32 mask = AllowedCores();
+        for (int i = 0; i < 4; ++i)
+            if (mask & (1u << i)) cores[count++] = i;
+        return count ? cores[n % unsigned(count)] : 0;
+    }
+
+    // Preferred core only; the mask stays all title cores so the kernel can
+    // still move a thread off a busy core.
+    void PlaceThread(Handle thread, int preferred)
+    {
+        const u32 mask = AllowedCores();
+        if (!(mask & (1u << preferred))) preferred = NthCore(0);
+        svcSetThreadCoreMask(thread, preferred, mask);
+    }
+
+    // Core 3 when the process was granted it (a forwarder with a 4-core NPDM);
+    // -1 otherwise. Only threads pinned there alone run on it.
+    int SystemCore()
+    {
+        static const int core = []
+        {
+            u64 process = 0;
+            if (R_FAILED(svcGetInfo(&process, InfoType_CoreMask, CUR_PROCESS_HANDLE, 0))) return -1;
+            return (process & 0x8u) && (process & 0x7u) ? 3 : -1;
+        }();
+        return core;
+    }
+
+    // Horizon: lower is more urgent. Guest threads run at 0x3B.
+    constexpr s32 kRenderPriority = 0x2D;   // GPU ring consumer, presenter, recorder
+    constexpr s32 kAudioPriority = 0x2C;    // the mixer: a late frame is an audible gap
+
+    // Core 0 is the main thread's: new threads start on 1, 2, 0, 1, ...
+    std::atomic<unsigned> g_nextCore{ 1 };
+    std::atomic<unsigned> g_renderThreads{ 0 };
+
     u64 g_mainThreadId = 0;
 
     struct ThreadControl
@@ -62,6 +120,10 @@ namespace
 void platform::Initialise()
 {
     g_mainThreadId = CurrentThreadId();
+
+    // The runtime keeps its own VkPipelineCache on SD (vulkan/pipeline.cpp);
+    // Mesa's disk cache beside it would only add SD writes during play.
+    setenv("MESA_SHADER_CACHE_DISABLE", "true", 0);
 
     // The runtime's player install layout lives on SD. Mount it before
     // settings, install discovery, or any game files are opened.
@@ -116,10 +178,31 @@ void platform::IdleThreadPriority()
 
 void platform::SetThreadAffinity(ThreadAffinityRole role)
 {
-    // Core topology and permitted masks vary by application/process type.
-    // Keep the system scheduler in control until runtime measurements justify
-    // a specific Switch core policy.
-    (void)role;
+    const Handle self = threadGetCurHandle();
+    switch (role)
+    {
+    case ThreadAffinityRole::PrimeCore:
+        PlaceThread(self, NthCore(0));
+        break;
+    case ThreadAffinityRole::RenderCore:
+        // The GPU ring consumer first (heavy), then the presenter.
+        PlaceThread(self, NthCore(1 + g_renderThreads.fetch_add(1, std::memory_order_relaxed)));
+        svcSetThreadPriority(self, kRenderPriority);
+        break;
+    case ThreadAffinityRole::AudioCore:
+        if (SystemCore() >= 0) svcSetThreadCoreMask(self, SystemCore(), 1u << SystemCore());
+        else PlaceThread(self, NthCore(2));
+        svcSetThreadPriority(self, kAudioPriority);
+        break;
+    case ThreadAffinityRole::PerformanceCore:
+        PlaceThread(self, NthCore(g_nextCore.fetch_add(1, std::memory_order_relaxed)));
+        break;
+    case ThreadAffinityRole::WorkerCore:
+        PlaceThread(self, NthCore(2));
+        break;
+    case ThreadAffinityRole::Default:
+        break;
+    }
 }
 
 void platform::PrintBacktrace(const char* why)
@@ -156,6 +239,7 @@ bool platform::StartThread(void (*body)(void*), void* argument, size_t stackByte
         delete control;
         return false;
     }
+    PlaceThread(control->thread.handle, NthCore(g_nextCore.fetch_add(1, std::memory_order_relaxed)));
 
     rc = threadStart(&control->thread);
     if (R_FAILED(rc))
@@ -186,6 +270,7 @@ platform::ThreadHandle platform::StartJoinableThread(void (*body)(void*), void* 
     Result rc = threadCreate(&control->thread, ThreadEntry, control, nullptr,
                              stackBytes, 0x3B, -2);
     if (R_FAILED(rc)) { delete control; return nullptr; }
+    PlaceThread(control->thread.handle, NthCore(g_nextCore.fetch_add(1, std::memory_order_relaxed)));
     rc = threadStart(&control->thread);
     if (R_FAILED(rc))
     {

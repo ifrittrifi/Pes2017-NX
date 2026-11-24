@@ -57,6 +57,13 @@ namespace kernel
                       env::Text("PES17_YIELD_SLEEP_US") != nullptr, false };
             const uint32_t limit = frame_rate::Limit();
             t.limited = limit != 0 && limit < frame_rate::kConsole;
+#ifdef __SWITCH__
+            // Three cores for the title, the runtime and the GPU ring: a guest
+            // thread spinning in yields takes a core the loader or the main
+            // thread needs (16 million yields before the menu, measured). Back
+            // off to short sleeps once a burst is clearly a spin.
+            t.limited = true;
+#endif
             LOGI("yield: %s", t.fixed ? "sleep cap fixed"
                                               : t.limited ? "sleeping in spins (FPS limit under 60)"
                                                           : "sleeping in spins only while the phone is hot");

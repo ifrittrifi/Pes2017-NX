@@ -177,6 +177,7 @@ namespace
     void WorkerMain()
     {
         crash::RegisterThread("audio worker");
+        platform::SetThreadAffinity(platform::ThreadAffinityRole::AudioCore);
         GuestCaller caller;
         if (!caller.Prepare()) { LOGE("audio: could not set up the worker's guest state"); return; }
         OpenOutput();

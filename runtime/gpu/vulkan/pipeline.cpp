@@ -262,7 +262,13 @@ namespace
             pathStr = path;
             return pathStr.c_str();
         }
+#ifdef __SWITCH__
+        // NVK compiles on the CPU at Tegra X1 speed: keep the pipelines between runs.
+        pathStr = "sdmc:/switch/PES2017/pipeline_cache.bin";
+        return pathStr.c_str();
+#else
         return nullptr;
+#endif
     }
 
     struct PipelineCacheHeader

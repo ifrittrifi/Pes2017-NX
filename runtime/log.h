@@ -186,6 +186,15 @@ namespace pes17log
     inline void Write(char level, const char* format, ...) __attribute__((format(printf, 2, 3)));
     inline void Write(char level, const char* format, ...)
     {
+#ifdef __SWITCH__
+        // Every line is a write to the SD card. The kernel trace ("[k]": every
+        // import's first calls, every file read) is off unless PES17_LOG_KERNEL=1.
+        if (level == 'k')
+        {
+            static const bool kernelTrace = env::Flag("PES17_LOG_KERNEL");
+            if (!kernelTrace) return;
+        }
+#endif
         va_list arguments;
         va_start(arguments, format);
         const std::string& line = Line(level, format, arguments);
