@@ -47,7 +47,10 @@ namespace vk::renderer::detail
         }
 
         Shader entry;
-        if (ShadersAsync())
+        // Pixel shaders only: a vertex shader can be a compute step that writes the guest's
+        // memory (memexport), and the game reads what it wrote -- skipping one left the game
+        // with data it never made (test 7 died at start-up). Vertex shaders are built at the draw.
+        if (type == shader::Type::Pixel && ShadersAsync())
         {
             // Built on a compiler thread; until it is, this draw is skipped (PES17_SYNC_SHADERS=1
             // compiles at the draw instead, stopping the frame for it).

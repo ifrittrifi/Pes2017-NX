@@ -34,6 +34,7 @@ PPC_FUNC(__imp__HalReturnToFirmware)
 {
     LOGI("HalReturnToFirmware(%u) -- guest asked to shut down", ctx.r3.u32);
     kernel::ReportUnimplemented();
+    std::fflush(stderr);
     std::exit(0);
 }
 

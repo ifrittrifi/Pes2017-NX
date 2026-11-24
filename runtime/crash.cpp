@@ -126,6 +126,7 @@ void crash::SampleThreadEvery(const char* name, unsigned seconds)
 extern "C" void PES17ReportBadIndirectCall(unsigned int guestAddress, const void*, const uint8_t*)
 {
     LOGE("indirect call to %08X has no recompiled function", guestAddress);
+    std::fflush(stderr);
     platform::PrintBacktrace("bad indirect call");
     crash::OnFault();
     std::exit(4);
@@ -657,6 +658,7 @@ extern "C" void PES17ReportBadIndirectCall(unsigned int guestAddress, const void
     else
         std::fprintf(stderr, "[W] target is inside the code range but was not identified as a function start\n");
     DumpBacktrace("indirect call backtrace");
+    std::fflush(stderr);
     crash::OnFault();
     std::exit(4);
 }
