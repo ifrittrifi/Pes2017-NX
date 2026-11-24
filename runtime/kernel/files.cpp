@@ -597,10 +597,39 @@ PPC_FUNC(__imp__NtSetInformationFile)
             if (fs::exists(target, ec) && !replace) status = X_STATUS_OBJECT_NAME_COLLISION;
             else
             {
+#ifdef __SWITCH__
+                // Horizon's file system renames neither an open file nor over an
+                // existing one: close it, clear the target, rename, reopen where
+                // it was. (Without this every save failed at data.tmp -> data.bin.)
+                long position = 0;
+                if (file->handle)
+                {
+                    position = std::ftell(file->handle);
+                    std::fclose(file->handle);
+                    file->handle = nullptr;
+                }
+                if (replace && fs::exists(target, ec)) fs::remove(target, ec);
+                ec.clear();
+                fs::rename(file->path, target, ec);
+                const fs::path now = ec ? file->path : target;
+                if (FILE* reopened = std::fopen(now.string().c_str(), "r+b"))
+                {
+                    if (position > 0) std::fseek(reopened, position, SEEK_SET);
+                    file->handle = reopened;
+                }
+                if (ec)
+                {
+                    status = 0xC0000022u;
+                    LOGW("file: could not rename %s to %s (%s)", file->path.string().c_str(),
+                         target.string().c_str(), ec.message().c_str());
+                }
+                else { LOGI("file: renamed %s to %s", file->path.string().c_str(), target.string().c_str()); file->path = target; }
+#else
                 if (file->handle) std::fflush(file->handle);
                 fs::rename(file->path, target, ec);
                 if (ec) status = 0xC0000022u;
                 else { LOGK("file: renamed %s to %s", file->path.string().c_str(), target.string().c_str()); file->path = target; }
+#endif
             }
         }
         if (iosb) { iosb->status = status; iosb->information = 0; }

@@ -247,7 +247,24 @@ int pes17::Run(int argc, char** argv)
         // Windows has no line buffering (and takes the request for an invalid
         // one), so there every write goes straight through.
         else
+        {
+#ifdef __SWITCH__
+            // A line at a time is a write to the SD card per line. Buffer it and
+            // flush twice a second; a crash writes crash.log on its own.
+            static char s_logBuffer[64 * 1024];
+            std::setvbuf(stderr, s_logBuffer, _IOFBF, sizeof s_logBuffer);
+            platform::StartThread([](void*)
+                {
+                    for (;;)
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                        std::fflush(stderr);
+                    }
+                }, nullptr, 64 * 1024, "log flush");
+#else
             std::setvbuf(stderr, nullptr, _IOLBF, 0);
+#endif
+        }
     }
 
     LOGI("--- PES 2017 recompilation runtime (%s) ---", PES17_TITLE_NAME);
