@@ -112,21 +112,24 @@ if(PES17_GPU_BACKEND STREQUAL "vulkan")
         "${CMAKE_SOURCE_DIR}/runtime/gpu/vulkan/*.cpp")
     list(APPEND RUNTIME_SOURCES ${VULKAN_SOURCES})
 endif()
-# The disc/STFS readers and XenonRecomp's patcher, for the installer
-# (runtime/install): turns the disc's executable into the update's.
-set(XENON "${CMAKE_SOURCE_DIR}/third_party/XenonRecomp")
-enable_language(C)
-list(APPEND RUNTIME_SOURCES
-    "${XENON}/XenonUtils/xex_patcher.cpp"
-    "${XENON}/XenonUtils/memory_mapped_file.cpp"
-    "${XENON}/thirdparty/libmspack/libmspack/mspack/lzxd.c"
-    "${XENON}/thirdparty/tiny-AES-c/aes.c")
-set(PES17_XENON_INCLUDES
-    "${XENON}/XenonUtils"
-    "${XENON}/thirdparty/simde"
-    "${XENON}/thirdparty/libmspack/libmspack/mspack"
-    "${XENON}/thirdparty/tiny-AES-c"
-    "${XENON}/thirdparty/TinySHA1")
+# XenonRecomp's patcher, for the desktop installer (runtime/install): turns the
+# disc's executable into the update's. Not on Switch: it needs mmap, and the SD
+# card holds the executable already extracted.
+if(NOT PES17_SWITCH)
+    set(XENON "${CMAKE_SOURCE_DIR}/third_party/XenonRecomp")
+    enable_language(C)
+    list(APPEND RUNTIME_SOURCES
+        "${XENON}/XenonUtils/xex_patcher.cpp"
+        "${XENON}/XenonUtils/memory_mapped_file.cpp"
+        "${XENON}/thirdparty/libmspack/libmspack/mspack/lzxd.c"
+        "${XENON}/thirdparty/tiny-AES-c/aes.c")
+    set(PES17_XENON_INCLUDES
+        "${XENON}/XenonUtils"
+        "${XENON}/thirdparty/simde"
+        "${XENON}/thirdparty/libmspack/libmspack/mspack"
+        "${XENON}/thirdparty/tiny-AES-c"
+        "${XENON}/thirdparty/TinySHA1")
+endif()
 
 # The glue build.sh generates from the recompiled output -- a stub for every
 # kernel import the runtime lacks, a tracing hook for every D3D9 entry point --
@@ -327,8 +330,10 @@ target_compile_definitions(pes17 PRIVATE
     PES17_XEX_SHA256_SP="${PES17_XEX_SHA256_SP}" PES17_XEX_SHA256_MP="${PES17_XEX_SHA256_MP}"
     PES17_DISC_SHA256_SP="${PES17_DISC_SHA256_SP}" PES17_DISC_SHA256_MP="${PES17_DISC_SHA256_MP}"
     PES17_UPDATE_SHA256_PATCH_MP="" PES17_UPDATE_SHA256_DLC1_UI_MP="" PES17_UPDATE_SHA256_DLC2_UI_MP="")
-target_include_directories(pes17 PRIVATE ${PES17_XENON_INCLUDES})
-target_compile_definitions(pes17 PRIVATE PES17_HAVE_XEX_PATCHER=1)
+if(PES17_XENON_INCLUDES)
+    target_include_directories(pes17 PRIVATE ${PES17_XENON_INCLUDES})
+    target_compile_definitions(pes17 PRIVATE PES17_HAVE_XEX_PATCHER=1)
+endif()
 if(PES17_SWITCH)
     # A Switch NRO is packaged from the linked ELF; it is not a normal desktop
     # executable and must not export a host-style -rdynamic symbol table.
