@@ -210,6 +210,7 @@ namespace vk::renderer::detail
         static double frameNs = 0; static uint32_t frames = 0, passes = 0;
         static double submissionNs = 0, clearNs = 0; static uint32_t submissions = 0, clearSpans = 0;
         static uint64_t lastEnd = 0; static double paceNs = 0; static uint32_t paces = 0;
+        static uint64_t clockFirstTick = 0; static std::chrono::steady_clock::time_point clockFirstCpu;
         static uint64_t firstFrame = g.frames;
         if (timing.pool && timing.submissionStamped)
         {
@@ -228,6 +229,13 @@ namespace vk::renderer::detail
                     paces++;
                 }
                 lastEnd = span[1];
+                // The GPU's clock against the CPU's over the same stretch: if the GPU is never idle
+                // and the two disagree, the timestamps are not in the nanoseconds they claim.
+                if (!clockFirstTick)
+                {
+                    clockFirstTick = span[1];
+                    clockFirstCpu = std::chrono::steady_clock::now();
+                }
             }
             const uint32_t n = std::min(timing.spans, State::kTimedSpans);
             if (n)
@@ -289,6 +297,15 @@ namespace vk::renderer::detail
             LOGW("gpu: one submission's end to the next: %.2f ms (its own work %.2f ms; the rest is uploads, the"
                  " window's copy and idle time)", paces ? paceNs / paces / 1e6 : 0.0,
                  submissions ? submissionNs / submissions / 1e6 : 0.0);
+            if (clockFirstTick && lastEnd > clockFirstTick)
+            {
+                const double cpuMs = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - clockFirstCpu).count();
+                const double gpuMs = double(lastEnd - clockFirstTick) * g.timestampPeriod / 1e6;
+                LOGW("gpu: clocks over the window: GPU timestamps %.0f ms, CPU %.0f ms (ratio %.2f)", gpuMs, cpuMs,
+                     cpuMs > 0 ? gpuMs / cpuMs : 0.0);
+            }
+            clockFirstTick = 0;
             paceNs = 0; paces = 0;
             submissionNs = clearNs = 0; submissions = clearSpans = 0; firstFrame = g.frames;
             g.clearedPixels = 0; g.imageClears = 0;

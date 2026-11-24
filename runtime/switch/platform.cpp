@@ -170,6 +170,16 @@ void platform::Initialise()
     }
     profiler_nx::Start();
 
+    // Handheld, the GPU runs at 307 MHz and the match is GPU-bound: the scene at 87.5%
+    // (1120x630), brought back to 1280x720 with FSR 1. Docked it stays at 1280x720.
+    // PES17_SCENE_SCALE=1 in env.txt keeps the full size handheld too.
+    if (appletGetOperationMode() != AppletOperationMode_Console)
+    {
+        if (!std::getenv("PES17_SCENE_SCALE")) setenv("PES17_SCENE_SCALE", "0.875", 1);
+        if (!std::getenv("PES17_UPSCALER") && std::strtod(std::getenv("PES17_SCENE_SCALE"), nullptr) < 1.0)
+            setenv("PES17_UPSCALER", "fsr", 1);
+    }
+
     // The console's capture button: homebrew starts with it refused.
     appletSetScreenShotPermission(AppletScreenShotPermission_Enable);
 

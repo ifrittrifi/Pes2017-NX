@@ -1484,7 +1484,15 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
         // Two to the power of the target's exponent bias, built by moving the
         // exponent of 1.0f rather than by calling powf on the draw path.
         const int32_t bias = std::clamp(colour.ExpBias(), -31, 31);
-        const float scale = std::bit_cast<float>(uint32_t(0x3F800000) + (bias << 23));
+        float scale = std::bit_cast<float>(uint32_t(0x3F800000) + (bias << 23));
+        // The players' shadow mask (MAX-blended into a 1280x720 target the pitch is shaded
+        // with): its values are scaled, so the floodlight shadows on the grass are darker.
+        // PES17_SHADOW_STRENGTH, 1 being the title's own; 2 by default.
+        if (call.pixelHash == 0x88A390A0C73AB1ADull)
+        {
+            static const float strength = float(std::clamp(env::Real("PES17_SHADOW_STRENGTH", 2.0), 0.0, 8.0));
+            scale *= strength;
+        }
         const bool gammaTarget = colour.Format() == 1;
         struct { uint32_t function; float reference; float scale; uint32_t gamma; } test{
             (control.AlphaTest() && pixelShaderRuns) ? control.AlphaFunc() : 7u,
