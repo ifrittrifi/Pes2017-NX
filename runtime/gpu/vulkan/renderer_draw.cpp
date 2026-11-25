@@ -1039,6 +1039,7 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
     // the scene -- and without them the grass was the scene's grey.
     const uint32_t quads = call.primitive == 13 ? call.indexCount / 4 : 0;
     const bool quadsWide = quads && (call.indexed ? call.index32 : call.indexCount > 0xFFFF);
+    uint32_t quadsDrawn = quads;
     if (call.primitive == 13)
     {
         if (!quads) { Skip("quad list of fewer than four vertices"); return; }
@@ -1067,18 +1068,31 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
         static thread_local std::vector<uint16_t> narrow;
         if (quadsWide) wide.resize(size_t(quads) * 6);
         else narrow.resize(size_t(quads) * 6);
+        // PES17_CROWD_DENSITY (0.25-1, 0.5 by default): the crowd's two billboard passes draw this
+        // share of their people. Both passes split their quads the same way, so the same quads
+        // are dropped in both G-buffers, every frame (no flicker). The passes were 5.5 ms of GPU.
+        static const uint32_t keepOfFour = [] {
+            const double d = std::clamp(env::Real("PES17_CROWD_DENSITY", 0.5), 0.25, 1.0);
+            return uint32_t(std::lround(d * 4.0));
+        }();
+        const bool thin = keepOfFour < 4 && ((call.pixelHash >> 40) == 0xB4BBEAull || (call.pixelHash >> 40) == 0x70F64Aull);
+        uint32_t kept = 0;
         for (uint32_t q = 0; q < quads; q++)
         {
+            if (thin && ((q * keepOfFour) & 3u) >= keepOfFour) continue;
             const uint32_t a = index(q * 4), b = index(q * 4 + 1), c = index(q * 4 + 2), d = index(q * 4 + 3);
             const uint32_t six[6] = { a, b, c, a, c, d };
             for (uint32_t k = 0; k < 6; k++)
             {
-                if (quadsWide) wide[size_t(q) * 6 + k] = six[k];
-                else narrow[size_t(q) * 6 + k] = uint16_t(six[k]);
+                if (quadsWide) wide[size_t(kept) * 6 + k] = six[k];
+                else narrow[size_t(kept) * 6 + k] = uint16_t(six[k]);
             }
+            kept++;
         }
-        if (quadsWide) std::memcpy(g.arenaMapped + expanded, wide.data(), wide.size() * 4);
-        else std::memcpy(g.arenaMapped + expanded, narrow.data(), narrow.size() * 2);
+        quadsDrawn = kept;
+        if (!kept) { Skip("crowd thinned to nothing"); return; }
+        if (quadsWide) std::memcpy(g.arenaMapped + expanded, wide.data(), size_t(kept) * 6 * 4);
+        else std::memcpy(g.arenaMapped + expanded, narrow.data(), size_t(kept) * 6 * 2);
         indexOffset = expanded;
     }
 
@@ -1576,7 +1590,7 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
             bound.indexType = indexType;
         }
         op.set |= DrawOp::kIndexed;
-        op.count = rectangles ? rectangles * 6 : quads ? quads * 6 : call.indexCount;
+        op.count = rectangles ? rectangles * 6 : quads ? quadsDrawn * 6 : call.indexCount;
         op.firstIndex = indexOffset / (wide ? 4 : 2);
     }
     else op.count = call.indexCount;
