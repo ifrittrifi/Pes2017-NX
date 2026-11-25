@@ -977,7 +977,14 @@ void vk::renderer::Swap(uint32_t frontBuffer)
         ++g.swapTick;
         const bool settled = g.swapTick > 1200 && g.swapTick - g.lastWriteBackTick > 180;
         const uint64_t behind = g.submissionSerial - std::min(g.submissionSerial, detail::CompletedSerial());
-        g.skipFrame = enabled && settled && behind >= 2 && g.skipRun < 2;
+        // Once the GPU has fallen behind, every other frame is drawn: an even rhythm looks far
+        // smoother than frames dropped as they happen. It ends after a calm second.
+        static bool active = false;
+        static uint32_t calm = 0;
+        if (enabled && settled && behind >= 2) { active = true; calm = 0; }
+        else if (active && behind == 0 && ++calm > 60) active = false;
+        if (!settled) active = false;
+        g.skipFrame = enabled && active && !wasSkipped;
         g.skipRun = g.skipFrame ? g.skipRun + 1 : 0;
         if (wasSkipped) { g.skippedFrames++; return; }
     }
