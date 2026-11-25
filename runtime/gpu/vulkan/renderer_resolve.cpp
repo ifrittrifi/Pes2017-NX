@@ -1047,7 +1047,11 @@ void vk::renderer::Swap(uint32_t frontBuffer)
         // smoother than frames dropped as they happen. It ends after a calm second.
         static bool active = false;
         static uint32_t calm = 0;
-        if (enabled && settled && behind >= 2) { active = true; calm = 0; }
+        // Only a load that lasts (twenty swaps in a row, a third of a second) starts the rhythm: a menu's
+        // burst of resolves for the two players on show is behind for a few swaps and was starting it.
+        static uint32_t over = 0;
+        over = behind >= 2 ? over + 1 : 0;
+        if (enabled && settled && over >= 20) { active = true; calm = 0; }
         else if (active && behind == 0 && ++calm > 60) active = false;
         if (!settled) active = false;
         g.skipFrame = enabled && active && !wasSkipped;
