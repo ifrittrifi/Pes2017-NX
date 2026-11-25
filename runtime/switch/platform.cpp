@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <cstring>
 #include "profiler_nx.h"
 #include <cstring>
@@ -389,5 +390,48 @@ namespace switch_clocks
         const char* mode = appletGetOperationMode() == AppletOperationMode_Console ? "docked" : "handheld";
         std::snprintf(out, size, "%s, cpu %u MHz, gpu %u MHz, memory %u MHz", mode,
                       hz[0] / 1000000u, hz[1] / 1000000u, hz[2] / 1000000u);
+    }
+
+    // The clocks the game needs, set by the game itself (no sys-clk): raised, never lowered. The
+    // system puts its own back whenever the performance mode changes, so this is looked at about
+    // once a second. PES17_CLOCKS=0 leaves them to sys-clk; PES17_CPU_MHZ / PES17_GPU_MHZ /
+    // PES17_MEM_MHZ pick others (0 leaves that one alone).
+    void Apply()
+    {
+        static std::chrono::steady_clock::time_point last{};
+        const auto now = std::chrono::steady_clock::now();
+        if (last != std::chrono::steady_clock::time_point{} && now - last < std::chrono::seconds(1)) return;
+        last = now;
+        static bool tried = false, have = false;
+        static uint32_t want[3]{};
+        if (!tried)
+        {
+            tried = true;
+            const char* off = std::getenv("PES17_CLOCKS");
+            const bool handheld = appletGetOperationMode() != AppletOperationMode_Console;
+            auto mhz = [](const char* name, uint32_t fallback) {
+                const char* text = std::getenv(name);
+                return (text && text[0] ? uint32_t(std::atoi(text)) : fallback) * 1000000u;
+            };
+            if (!(off && off[0] == '0'))
+            {
+                want[0] = mhz("PES17_CPU_MHZ", 1224);
+                want[1] = mhz("PES17_GPU_MHZ", handheld ? 614 : 768);
+                want[2] = mhz("PES17_MEM_MHZ", 1600);
+                have = R_SUCCEEDED(clkrstInitialize());
+            }
+        }
+        if (!have) return;
+        const PcvModuleId modules[3] = { PcvModuleId_CpuBus, PcvModuleId_GPU, PcvModuleId_EMC };
+        for (int i = 0; i < 3; i++)
+        {
+            if (!want[i]) continue;
+            ClkrstSession session{};
+            if (R_FAILED(clkrstOpenSession(&session, modules[i], 3))) continue;
+            u32 rate = 0;
+            if (R_SUCCEEDED(clkrstGetClockRate(&session, &rate)) && rate < want[i])
+                clkrstSetClockRate(&session, want[i]);
+            clkrstCloseSession(&session);
+        }
     }
 }

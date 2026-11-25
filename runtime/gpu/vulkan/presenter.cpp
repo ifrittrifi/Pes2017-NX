@@ -41,7 +41,7 @@ std::string vk::PresenterReport() { return "presenter: none (headless build)\n";
 
 #include "capture.h"
 #ifdef __SWITCH__
-namespace switch_clocks { void Describe(char* out, size_t size); }
+namespace switch_clocks { void Describe(char* out, size_t size); void Apply(); }
 #endif
 namespace
 {
@@ -1055,6 +1055,9 @@ namespace
     // follows. Moves on to the next frame slot. False when the submission failed.
     bool SubmitAndPresent(Frame& frame, uint32_t imageIndex, uint64_t taken, uint64_t presentId)
     {
+#ifdef __SWITCH__
+        switch_clocks::Apply();
+#endif
         VkImage image = g.images[imageIndex];
         DrawOverlay(frame, image);
         CountFrame(taken);
