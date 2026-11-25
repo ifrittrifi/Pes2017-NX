@@ -175,7 +175,7 @@ void platform::Initialise()
                 "[log]\npes17_report=true\npes17_gpu_timing=true\n;pes17_fps_counter=true\n\n"
                 "[graphics]\n;pes17_scene_scale=0.875\n;pes17_upscaler=fsr\n;pes17_shadow_strength=2\n"
                 ";pes17_no_msaa=false\n;pes17_no_crowd=false\n\n"
-                "[clocks]\n;pes17_clocks=true\n;pes17_cpu_mhz=1224\n;pes17_gpu_mhz=614\n;pes17_mem_mhz=1600\n\n"
+                "[clocks]\n;pes17_clocks=true\n;pes17_cpu_mhz=1785\n;pes17_gpu_mhz=614\n;pes17_mem_mhz=1600\n\n"
                 "[performance]\n;pes17_frame_skip=true\n\n"
                 "[shader]\n;pes17_sync_shaders=false\n;pes17_sync_pipelines=false\n;pes17_sync_vertex=false\n"
                 ";pes17_cache_thread=true\n;pes17_whole_clears=false\n", made);
@@ -449,7 +449,7 @@ namespace switch_clocks
             };
             if (!(off && off[0] == '0'))
             {
-                want[0] = mhz("PES17_CPU_MHZ", 1224);
+                want[0] = mhz("PES17_CPU_MHZ", 1785);
                 want[1] = mhz("PES17_GPU_MHZ", handheld ? 614 : 768);
                 want[2] = mhz("PES17_MEM_MHZ", 1600);
                 have = R_SUCCEEDED(clkrstInitialize());
