@@ -292,6 +292,7 @@ namespace vk::renderer::detail
         if (p.copy && p.copy->image == p.image && p.copy->writtenFrame == p.writtenFrame)
             p.copy->writtenBack = true;
         g.windowWriteBacks++;
+        g.lastWriteBackTick = g.swapTick;
         if (p.width == 256 && p.height == 256)
         {
             // A kit composition: its average colour (R G B), for tools/kits.sh.
@@ -896,6 +897,7 @@ void vk::renderer::Swap(uint32_t frontBuffer)
     // draws recorded, and why the rest were skipped, say whether a black or
     // blank screen is nothing being drawn or something being drawn wrongly.
     {
+        static uint64_t lastSkippedFrames = 0;
         static uint64_t swaps = 0, lastDraws = 0, lastRecorded = 0, lastResolves = 0;
         static std::map<const char*, uint64_t> lastSkipped;
         if (++swaps % 600 == 0)
@@ -953,11 +955,29 @@ void vk::renderer::Swap(uint32_t frontBuffer)
             }
             g.vertexBytesCopied = g.vertexBytesReused = 0;
             g.windowWriteBacks = 0;
+            LOGI("perf: %llu of the last 600 frames left unrendered (frame skipping)",
+                 (unsigned long long)(g.skippedFrames - lastSkippedFrames));
+            lastSkippedFrames = g.skippedFrames;
             LOGI("renderer: last 600 swaps: %llu draws (%llu recorded), %llu resolves; skipped:%s",
                  (unsigned long long)(g.draws - lastDraws), (unsigned long long)(g.drawsRecorded - lastRecorded),
                  (unsigned long long)(g.resolves - lastResolves), skipped.empty() ? " nothing" : skipped.c_str());
             lastDraws = g.draws; lastRecorded = g.drawsRecorded; lastResolves = g.resolves;
         }
+    }
+    {
+        // The frame that ends here was left empty when the GPU was behind: it is not shown, the
+        // last one stays on the screen. Whether the next is, depends on how far behind it is now.
+        const bool wasSkipped = g.skipFrame;
+        static const bool enabled = [] {
+            const char* text = env::Text("PES17_FRAME_SKIP");
+            return !(text && text[0] == '0' && !text[1]);
+        }();
+        ++g.swapTick;
+        const bool settled = g.swapTick > 1200 && g.swapTick - g.lastWriteBackTick > 180;
+        const uint64_t behind = g.submissionSerial - std::min(g.submissionSerial, detail::CompletedSerial());
+        g.skipFrame = enabled && settled && behind >= 2 && g.skipRun < 2;
+        g.skipRun = g.skipFrame ? g.skipRun + 1 : 0;
+        if (wasSkipped) { g.skippedFrames++; return; }
     }
     auto found = g.resolvedTo.find(frontBuffer & ~0xFFFu);
     if (found == g.resolvedTo.end())

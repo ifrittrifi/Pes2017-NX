@@ -305,6 +305,12 @@ namespace vk::renderer::detail
         std::unordered_map<uint64_t, VertexCopy> vertexCopies;
         uint64_t vertexBytesCopied = 0, vertexBytesReused = 0;
         uint64_t windowWriteBacks = 0;   // resolve write-backs since the last perf line
+        // Frame skipping: while the GPU is two submissions behind, the next frame's scene draws
+        // are left out (and the frame is not presented), so the title keeps its 60 Hz pace and
+        // the match does not run in slow motion.
+        bool skipFrame = false;
+        uint32_t skipRun = 0;
+        uint64_t swapTick = 0, lastWriteBackTick = 0, skippedFrames = 0;
         // The scale of the surface the open pass draws into.
         float currentScale = 1.0f;
 

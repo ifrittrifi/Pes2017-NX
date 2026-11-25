@@ -726,6 +726,10 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
                                  depthState.ZFunc() == 7 &&
                                  !viewportControl.XScale() && !viewportControl.YScale();
 
+    // A frame left unrendered keeps its clears, resolves and CPU work (memexport ran above) and
+    // drops the drawing itself; the screen keeps the last real frame (vk::renderer::Swap).
+    if (g.skipFrame && !clearRectangles) return;
+
     // The depth-only form. Answered before the targets are sized, because the
     // rectangle's scissor is left at its reset value -- 8192 square -- and
     // letting that decide how tall a surface is makes every depth buffer in the

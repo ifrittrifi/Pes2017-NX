@@ -176,6 +176,7 @@ void platform::Initialise()
                 "[graphics]\n;pes17_scene_scale=0.875\n;pes17_upscaler=fsr\n;pes17_shadow_strength=2\n"
                 ";pes17_no_msaa=false\n;pes17_no_crowd=false\n\n"
                 "[clocks]\n;pes17_clocks=true\n;pes17_cpu_mhz=1224\n;pes17_gpu_mhz=614\n;pes17_mem_mhz=1600\n\n"
+                "[performance]\n;pes17_frame_skip=true\n\n"
                 "[shader]\n;pes17_sync_shaders=false\n;pes17_sync_pipelines=false\n;pes17_sync_vertex=false\n"
                 ";pes17_cache_thread=true\n;pes17_whole_clears=false\n", made);
             std::fclose(made);
