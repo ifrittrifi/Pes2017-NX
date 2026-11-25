@@ -415,6 +415,8 @@ void vk::renderer::Resolve(const gpu::RegisterFile& r)
 {
     Stopwatch watch(g.resolveNanoseconds);
     if (!g.device) return;
+    // A frame left unrendered has drawn nothing to copy: the textures keep the last frame's.
+    if (g.skipFrame) return;
     const gpu::CopyControl control{ r[gpu::RB_COPY_CONTROL] };
     VkRect2D rect{};
     ScissorOf(r, rect);
