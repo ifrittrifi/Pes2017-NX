@@ -861,6 +861,10 @@ namespace vk::renderer::detail
     void CollectPassTimings(uint32_t slot);
     bool ShaderReadyOrQueued(shader::Type type, uint64_t hash, const uint32_t* code, size_t words, Shader& out);
     bool ShadersAsync();
+    // Set per draw: only draws into a screen-sized surface may be skipped while their shader or
+    // pipeline is built; the small ones (kits, atlases) are written back to memory, and a skipped
+    // draw there stays black for good.
+    extern bool g_drawMaySkip;
     void ReportWaits(uint64_t frames);
     void WriteDump(const char* name, const uint8_t* rgba, uint32_t width, uint32_t height);
     const char* FrameDumpDirectory();

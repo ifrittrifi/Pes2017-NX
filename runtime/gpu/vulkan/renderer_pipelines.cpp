@@ -30,6 +30,8 @@ namespace vk::renderer::detail
     // A shader the title has not drawn with before here: taken from the ones
     // compiled when it was loaded (TakePrepared), or translated and compiled
     // now -- a stall, which is why the load-time path exists.
+    bool g_drawMaySkip = true;
+
     const Shader* ShaderFor(shader::Type type, uint64_t hash, const uint32_t* code, size_t words)
     {
         if (!code || !words) return nullptr;
@@ -51,7 +53,7 @@ namespace vk::renderer::detail
         // memory (memexport), and the game reads what it wrote -- skipping one left the game
         // with data it never made (test 7 died at start-up). Vertex shaders are built at the draw.
         static const bool asyncVertex = !env::Flag("PES17_SYNC_VERTEX");
-        if ((type == shader::Type::Pixel || asyncVertex) && ShadersAsync())
+        if ((type == shader::Type::Pixel || asyncVertex) && ShadersAsync() && g_drawMaySkip)
         {
             // Built on a compiler thread; until it is, this draw is skipped (PES17_SYNC_SHADERS=1
             // compiles at the draw instead, stopping the frame for it).

@@ -673,6 +673,7 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
     const VkPrimitiveTopology topology = TopologyFor(call.primitive);
     if (topology == VK_PRIMITIVE_TOPOLOGY_MAX_ENUM) { Skip("primitive type"); return; }
 
+    g_drawMaySkip = gpu::SurfaceInfo{ r[gpu::RB_SURFACE_INFO] }.Pitch() >= 1200;
     gpu::detail::SetCurrentDrawStage("Draw_ShaderFor");
     const Shader* vertex = ShaderFor(shader::Type::Vertex, call.vertexHash,
                                      call.vertexCode, call.vertexWords);
@@ -1176,7 +1177,7 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
     bool newPipeline = false;
     // A pipeline not built yet is built on the warm-up worker and the draw is skipped until it
     // is (the object shows a frame or a few late) instead of freezing the frame for the compile.
-    if (ShadersAsync())
+    if (ShadersAsync() && g_drawMaySkip)
     {
         static const bool syncPipelines = env::Flag("PES17_SYNC_PIPELINES");
         if (!syncPipelines && !FindPipeline(key))
