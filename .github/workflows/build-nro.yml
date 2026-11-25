@@ -6,6 +6,16 @@ name: Build Switch NRO (full rebuild, manual)
 # build-nro-skip-cache.yml, which keeps the compiled PPC objects.
 on:
   workflow_dispatch:
+    inputs:
+      pgo:
+        description: "Profile-guided optimization: none, generate (training build, writes a profile when ZL+ZR+Minus are held) or use (builds with pgo/pgo.zip)"
+        type: choice
+        options: [none, generate, use]
+        default: none
+      lto:
+        description: "Link-time optimization (needs a lot of memory at the link; may fail on a small runner)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,6 +29,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
+    env:
+      MODE: ${{ inputs.pgo || 'none' }}-lto${{ inputs.lto && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,15 +84,27 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: build-switch
-          key: nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-${{ github.run_id }}
+          key: nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-${{ env.MODE }}-${{ github.run_id }}
           restore-keys: |
-            nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-
+            nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-${{ env.MODE }}-
+
+      - name: Profile for the PGO build
+        if: ${{ inputs.pgo == 'use' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s pgo/pgo.zip || { echo "pgo/pgo.zip is missing: train with pgo=generate first and upload the folder it wrote"; exit 1; }
+          rm -rf pgo/profile && mkdir -p pgo/profile
+          unzip -q -j pgo/pgo.zip -d pgo/profile
+          echo "profile files: $(ls pgo/profile | wc -l)"
 
       - name: Build
         shell: bash
         run: |
           set -euo pipefail
-          docker run --rm -v "$GITHUB_WORKSPACE:/work" -v "$MESA_SDK:/mesa-sdk:ro" -w /work \
+          PGO_MODE="${{ inputs.pgo }}"; [ "$PGO_MODE" = "none" ] && PGO_MODE=""
+          LTO_MODE="OFF"; [ "${{ inputs.lto }}" = "true" ] && LTO_MODE="ON"
+          docker run --rm -e PES17_PGO="$PGO_MODE" -e PES17_LTO="$LTO_MODE" -e PES17_PGO_DIR="/work/pgo/profile" -v "$GITHUB_WORKSPACE:/work" -v "$MESA_SDK:/mesa-sdk:ro" -w /work \
             devkitpro/devkita64:latest bash -euc '
               export DEVKITPRO=/opt/devkitpro
               export DEVKITA64="$DEVKITPRO/devkitA64"
@@ -110,12 +134,12 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: build-switch
-          key: nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-${{ github.run_id }}
+          key: nro-${{ steps.image.outputs.id }}-${{ hashFiles('ppc/**', 'runtime/mmio_hook.h', 'cmake/switch-toolchain.cmake') }}-${{ env.MODE }}-${{ github.run_id }}
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: pes2017-nro
+          name: pes2017-nro${{ inputs.pgo && inputs.pgo != 'none' && format('-pgo-{0}', inputs.pgo) || '' }}
           path: |
             pes2017.nro
             pes17.map
