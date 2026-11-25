@@ -173,7 +173,7 @@ void platform::Initialise()
                 "; sdmc:/switch/pes2017/config.ini\n"
                 "; nilai on/off: true atau false. baris yang diawali ; atau # tidak aktif.\n\n"
                 "[log]\npes17_report=true\npes17_gpu_timing=true\n;pes17_fps_counter=true\n\n"
-                "[graphics]\n;pes17_scene_scale=0.875\n;pes17_upscaler=fsr\n;pes17_shadow_strength=2\n"
+                "[graphics]\n;pes17_scene_scale=0.8\n;pes17_upscaler=fsr\n;pes17_shadow_strength=2\n"
                 ";pes17_no_msaa=false\n;pes17_no_crowd=false\n\n"
                 "[clocks]\n;pes17_clocks=true\n;pes17_cpu_mhz=1785\n;pes17_gpu_mhz=614\n;pes17_mem_mhz=1600\n\n"
                 "[performance]\n;pes17_frame_skip=true\n\n"
@@ -216,12 +216,12 @@ void platform::Initialise()
     }
     profiler_nx::Start();
 
-    // Handheld, the GPU runs at 307 MHz and the match is GPU-bound: the scene at 87.5%
-    // (1120x630), brought back to 1280x720 with FSR 1. Docked it stays at 1280x720.
+    // Handheld, the GPU runs at 307 MHz and the match is GPU-bound: the scene at 80%
+    // (1024x576), brought back to 1280x720 with FSR 1. Docked it stays at 1280x720.
     // PES17_SCENE_SCALE=1 in config.ini keeps the full size handheld too.
     if (appletGetOperationMode() != AppletOperationMode_Console)
     {
-        if (!std::getenv("PES17_SCENE_SCALE")) setenv("PES17_SCENE_SCALE", "0.875", 1);
+        if (!std::getenv("PES17_SCENE_SCALE")) setenv("PES17_SCENE_SCALE", "0.8", 1);
         if (!std::getenv("PES17_UPSCALER") && std::strtod(std::getenv("PES17_SCENE_SCALE"), nullptr) < 1.0)
             setenv("PES17_UPSCALER", "fsr", 1);
     }
