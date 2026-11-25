@@ -846,6 +846,11 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
                                                 useSamples),
                                         width, height, depthInfo.Format());
     if (!colourTarget || !depthTarget) return;
+    for (Target* t : { colourTarget, depthTarget })
+    {
+        if (t->dirtyA != UINT32_MAX) t->dirtyA = std::max(t->dirtyA, height);
+        if (t->dirtyS != UINT32_MAX) t->dirtyS = std::max(t->dirtyS, height);
+    }
 
     // In a frame dump, what the stencil buffer holds when a draw that tests it for EQUAL begins: the
     // crowd's composite is one, and it draws only where the billboard passes marked the stencil.

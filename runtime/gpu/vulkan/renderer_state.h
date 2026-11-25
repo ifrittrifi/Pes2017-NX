@@ -129,6 +129,11 @@ namespace vk::renderer::detail
         uint64_t clearedAtDraw = UINT64_MAX;
         // The frame that clear happened in, for the pass trace.
         uint64_t depthClearedIn = UINT64_MAX;
+        // The rows (guest) draws have reached since the image was last cleared whole, for the
+        // colour/depth aspect (A) and the stencil (S), and the values that clear left: a later
+        // clear to the same value only has to empty those rows. UINT32_MAX until the first.
+        uint32_t dirtyA = UINT32_MAX, dirtyS = UINT32_MAX;
+        uint32_t cleanA = 0xFFFFFFFEu, cleanS = 0xFFFFFFFEu;
     };
 
     struct Shader

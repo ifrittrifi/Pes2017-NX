@@ -181,8 +181,22 @@ namespace vk::renderer::detail
     bool ClearRows(Target& target, uint32_t rows, bool colour, float depth, bool clearStencil, uint32_t stencilValue,
                    bool keepDepth = false)
     {
-        if (!rows || !target.view || vk::pipeline::LegacyMode() || !dispatch.beginRendering || !dispatch.endRendering)
+        if (!target.view || vk::pipeline::LegacyMode() || !dispatch.beginRendering || !dispatch.endRendering)
             return false;
+        // Only the rows draws have reached since the image was last cleared whole to the same
+        // value can hold anything else.
+        const bool needA = colour || !keepDepth, needS = !colour && clearStencil;
+        const uint32_t valueA = colour ? 0u : std::bit_cast<uint32_t>(std::clamp(depth, 0.0f, 1.0f));
+        static const bool dirtyOff = env::Flag("PES17_WHOLE_CLEARS");
+        const bool narrow = !dirtyOff && (needA || needS) &&
+            (!needA || (target.dirtyA != UINT32_MAX && target.cleanA == valueA)) &&
+            (!needS || (target.dirtyS != UINT32_MAX && target.cleanS == stencilValue));
+        if (narrow)
+        {
+            const uint32_t limit = std::max(needA ? target.dirtyA : 0u, needS ? target.dirtyS : 0u) + 8;
+            if (limit < target.height) rows = rows ? std::min(rows, limit) : limit;
+        }
+        if (!rows) return false;
         const VkImageView view = target.view;
         const VkRect2D area{ { 0, 0 }, { HostOf(target.width, target.scale),
                                          std::min(HostOf(rows, target.scale) + 1, HostOf(target.height, target.scale)) } };
@@ -231,10 +245,22 @@ namespace vk::renderer::detail
                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                                  0, 1, &after, 0, nullptr, 0, nullptr);
         });
+        if (narrow)
+        {
+            if (needA && rows >= target.dirtyA) target.dirtyA = 0;
+            if (needS && rows >= target.dirtyS) target.dirtyS = 0;
+        }
         g.imageClears++;
         g.clearedPixels += uint64_t(area.extent.width) * area.extent.height * uint64_t(target.samples);
         g.regionPixels += uint64_t(area.extent.width) * area.extent.height * uint64_t(target.samples);
         return true;
+    }
+
+    // An image cleared whole: nothing is dirty, and the values are known.
+    void MarkWholeClear(Target& target, bool a, float depth, bool s, uint32_t stencilValue)
+    {
+        if (a) { target.dirtyA = 0; target.cleanA = std::bit_cast<uint32_t>(std::clamp(depth, 0.0f, 1.0f)); }
+        if (s) { target.dirtyS = 0; target.cleanS = stencilValue; }
     }
 
     void ClearAliasedDepth(uint32_t fromTile, uint32_t endTile, float depth, bool clearStencil, uint32_t stencilValue)
@@ -300,6 +326,7 @@ namespace vk::renderer::detail
                           VK_PIPELINE_STAGE_TRANSFER_BIT, kDepthStages);
             target.clearedAtDraw = g.drawsRecorded;
             target.depthClearedIn = g.frames;
+            MarkWholeClear(target, true, depth, clearStencil, stencilValue);
         }
         EndTimedSpan(span);
     }
@@ -345,6 +372,7 @@ namespace vk::renderer::detail
                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                           VK_ACCESS_TRANSFER_WRITE_BIT, kDepthAccess,
                           VK_PIPELINE_STAGE_TRANSFER_BIT, kDepthStages);
+            MarkWholeClear(target, false, 0.0f, true, value);
         }
         EndTimedSpan(span);
     }
@@ -389,6 +417,7 @@ namespace vk::renderer::detail
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                           VK_ACCESS_TRANSFER_WRITE_BIT, kColourAccess,
                           VK_PIPELINE_STAGE_TRANSFER_BIT, kColourStages);
+            MarkWholeClear(target, true, 0.0f, false, 0);
         }
         EndTimedSpan(span);
     }
