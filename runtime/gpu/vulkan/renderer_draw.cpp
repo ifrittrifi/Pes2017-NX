@@ -846,11 +846,6 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
                                                 useSamples),
                                         width, height, depthInfo.Format());
     if (!colourTarget || !depthTarget) return;
-    for (Target* t : { colourTarget, depthTarget })
-    {
-        if (t->dirtyA != UINT32_MAX) t->dirtyA = std::max(t->dirtyA, height);
-        if (t->dirtyS != UINT32_MAX) t->dirtyS = std::max(t->dirtyS, height);
-    }
 
     // In a frame dump, what the stencil buffer holds when a draw that tests it for EQUAL begins: the
     // crowd's composite is one, and it draws only where the billboard passes marked the stencil.
@@ -1271,6 +1266,18 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
     scissor.extent.height = std::min(scissor.extent.height,
                                      clipHeight - uint32_t(scissor.offset.y));
     if (!scissor.extent.width || !scissor.extent.height) { Skip("empty scissor"); return; }
+    {
+        // The rows this draw can reach, for the next clear: inside the scissor and the viewport
+        // (a clearing rectangle's reset scissor is taller than any surface; its viewport is not).
+        uint32_t bottom = uint32_t(scissor.offset.y) + scissor.extent.height;
+        const float viewportBottom = std::max(viewport.y, viewport.y + viewport.height);
+        if (viewportBottom > 0.0f && viewportBottom + 2.0f < float(bottom)) bottom = uint32_t(viewportBottom) + 2u;
+        for (Target* t : { colourTarget, depthTarget })
+        {
+            if (t->dirtyA != UINT32_MAX) t->dirtyA = std::max(t->dirtyA, bottom);
+            if (t->dirtyS != UINT32_MAX) t->dirtyS = std::max(t->dirtyS, bottom);
+        }
+    }
 
     State::Bound& bound = g.bound;
     DrawOp op;

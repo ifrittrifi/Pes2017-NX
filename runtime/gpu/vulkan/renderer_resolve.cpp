@@ -395,6 +395,10 @@ namespace vk::renderer::detail
         static const bool sync =
             false;
         if (sync) { PublishWriteBacksNow(); return; }
+        // Only the first of a burst starts the GPU on the frame at once: every submission is a gap
+        // in the GPU's work and a command buffer to set up, and a replay queues dozens of these.
+        // The rest go out with the frame, or when the title looks (PublishWriteBacksNow).
+        if (g_pendingWriteBacks.size() > 1) return;
         Submit(false);
         BeginFrame();
     }
