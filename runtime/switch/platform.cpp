@@ -159,16 +159,19 @@ void platform::Initialise()
         }
     }
 
-    // Settings without a rebuild: sdmc:/switch/pes2017/env.txt, KEY=VALUE a
-    // line (# starts a comment), read before anything looks at its variables.
-    if (FILE* env = std::fopen("sdmc:/switch/pes2017/env.txt", "r"))
+    // Settings without a rebuild: sdmc:/switch/pes2017/config.ini (env.txt if there is none),
+    // KEY=VALUE a line (# or ; starts a comment, [sections] are ignored), read before anything
+    // looks at its variables.
+    FILE* env = std::fopen("sdmc:/switch/pes2017/config.ini", "r");
+    if (!env) env = std::fopen("sdmc:/switch/pes2017/env.txt", "r");
+    if (env)
     {
         char line[256];
         while (std::fgets(line, sizeof line, env))
         {
             char* text = line;
             while (*text == ' ' || *text == '\t') ++text;
-            if (*text == '#' || *text == '\0' || *text == '\n' || *text == '\r') continue;
+            if (*text == '#' || *text == ';' || *text == '[' || *text == '\0' || *text == '\n' || *text == '\r') continue;
             char* equals = std::strchr(text, '=');
             if (!equals) continue;
             *equals = '\0';
@@ -184,7 +187,7 @@ void platform::Initialise()
 
     // Handheld, the GPU runs at 307 MHz and the match is GPU-bound: the scene at 87.5%
     // (1120x630), brought back to 1280x720 with FSR 1. Docked it stays at 1280x720.
-    // PES17_SCENE_SCALE=1 in env.txt keeps the full size handheld too.
+    // PES17_SCENE_SCALE=1 in config.ini keeps the full size handheld too.
     if (appletGetOperationMode() != AppletOperationMode_Console)
     {
         if (!std::getenv("PES17_SCENE_SCALE")) setenv("PES17_SCENE_SCALE", "0.875", 1);
