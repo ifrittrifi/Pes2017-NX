@@ -6,6 +6,15 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <sys/stat.h>
+
+#if defined(PES17_PGO_GENERATE)
+// The training build (build-switch.sh, PES17_PGO=generate): libgcov's counters, written to
+// sdmc:/switch/pes2017/pgo when ZL + ZR + Minus are held, so the profile is the session played.
+extern "C" void __gcov_dump(void);
+extern "C" void __gcov_reset(void);
+#endif
 
 namespace
 {
@@ -56,6 +65,27 @@ switch_input::State switch_input::Poll()
     g_dumpCombo.store((raw & (HidNpadButton_StickL | HidNpadButton_StickR)) ==
                           (HidNpadButton_StickL | HidNpadButton_StickR),
                       std::memory_order_relaxed);
+#if defined(PES17_PGO_GENERATE)
+    {
+        static bool written = false;
+        const u64 combo = HidNpadButton_ZL | HidNpadButton_ZR | HidNpadButton_Minus;
+        if ((raw & combo) == combo && !written)
+        {
+            written = true;
+            mkdir("/switch", 0777);
+            mkdir("/switch/pes2017", 0777);
+            mkdir("/switch/pes2017/pgo", 0777);
+            __gcov_dump();
+            __gcov_reset();
+            if (FILE* done = std::fopen("/switch/pes2017/pgo/WRITTEN.txt", "w"))
+            {
+                std::fputs("profile written\n", done);
+                std::fclose(done);
+            }
+        }
+        else if ((raw & combo) != combo) written = false;
+    }
+#endif
     const HidAnalogStickState left = padGetStickPos(&g_pad, 0);
     const HidAnalogStickState right = padGetStickPos(&g_pad, 1);
 

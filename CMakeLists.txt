@@ -161,6 +161,46 @@ add_executable(pes17 ${RUNTIME_SOURCES}
     ${PES17_ONLINE_SOURCES}
     "${PES17_PPC_DIR}/stubs_generated.cpp")
 target_link_libraries(pes17 PRIVATE ppc_recomp)
+
+# Link-time and profile-guided optimization of the generated code (build-switch.sh: PES17_LTO,
+# PES17_PGO, PES17_PGO_DIR), after BO2-360-NX. A profile is worth about 9 % of CPU time, and it has
+# to match the code it was trained on. The training build instruments the generated code and the
+# renderer; the run writes sdmc:/switch/pes2017/pgo when ZL + ZR + Minus are held.
+set(PES17_PGO "" CACHE STRING "Switch: generate, use or empty")
+set(PES17_PGO_DIR "" CACHE PATH "Switch, PES17_PGO=use: the folder with the training run's profile")
+option(PES17_LTO "Switch: link-time optimization (needs a lot of memory at the link)" OFF)
+if(PES17_SWITCH)
+    set(_pes17_pgo_native
+        "${CMAKE_SOURCE_DIR}/runtime/gpu/gpu.cpp"
+        "${CMAKE_SOURCE_DIR}/runtime/gpu/vulkan/renderer_draw.cpp"
+        "${CMAKE_SOURCE_DIR}/runtime/gpu/vulkan/renderer_resolve.cpp"
+        "${CMAKE_SOURCE_DIR}/runtime/gpu/vulkan/renderer_targets.cpp"
+        "${CMAKE_SOURCE_DIR}/runtime/gpu/vulkan/renderer_pipelines.cpp")
+    if(PES17_LTO)
+        target_compile_options(ppc_recomp PRIVATE -flto=4 -ffat-lto-objects)
+        target_link_options(pes17 PRIVATE -flto=4 -flto-partition=balanced)
+    endif()
+    if(PES17_PGO STREQUAL "generate")
+        # -fno-profile-values: devkitA64's libgcov reaches its thread-local variables (the
+        # indirect-call profiler's) through tpidr_el0, which is 0 on Horizon's threads.
+        set(_gen -fprofile-generate=/switch/pes2017/pgo -fno-profile-values -fprofile-update=single
+                 "-fprofile-prefix-path=${CMAKE_BINARY_DIR}")
+        target_compile_options(ppc_recomp PRIVATE ${_gen})
+        set_property(SOURCE ${_pes17_pgo_native} APPEND PROPERTY COMPILE_OPTIONS ${_gen})
+        target_compile_definitions(pes17 PRIVATE PES17_PGO_GENERATE=1)
+        target_link_libraries(pes17 PRIVATE gcov)
+    elseif(PES17_PGO STREQUAL "use")
+        if(NOT PES17_PGO_DIR OR NOT IS_DIRECTORY "${PES17_PGO_DIR}")
+            message(FATAL_ERROR "PES17_PGO=use needs PES17_PGO_DIR, the folder with the profile")
+        endif()
+        set(_use "-fprofile-use=${PES17_PGO_DIR}" "-fprofile-prefix-path=${CMAKE_BINARY_DIR}"
+                 -fprofile-partial-training -fprofile-correction -Wno-missing-profile -Wno-coverage-mismatch)
+        target_compile_options(ppc_recomp PRIVATE ${_use})
+        set_property(SOURCE ${_pes17_pgo_native} APPEND PROPERTY COMPILE_OPTIONS ${_use})
+    elseif(PES17_PGO)
+        message(FATAL_ERROR "PES17_PGO must be generate, use or empty")
+    endif()
+endif()
 # ppc_recomp_shared.h declares a function taking uint8_t before every includer has <cstdint>.
 # Keep both forced includes in one SHELL group so CMake preserves each -include pair.
 if(PES17_SWITCH)
