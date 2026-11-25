@@ -162,10 +162,13 @@ namespace vk::renderer::detail
     uint32_t RowsReached(const TargetKey& key, const Target& target, uint32_t endTile)
     {
         static const bool whole = env::Flag("PES17_WHOLE_CLEARS");
-        if (whole || endTile >= 2048 || endTile <= key.baseTile || !key.pitch) return 0;
+        // A depth image is keyed with no pitch: its own width stands in (never wider than the
+        // real pitch, so the rows come out the same or more, never fewer).
+        const uint32_t pitch = key.pitch ? key.pitch : target.width;
+        if (whole || endTile >= 2048 || endTile <= key.baseTile || !pitch) return 0;
         const uint32_t columns = key.samples >= 2 ? 40u : 80u;
         const uint32_t rowsPerTile = key.samples >= 1 ? 8u : 16u;
-        const uint32_t tilesPerRow = (key.pitch + columns - 1) / columns;
+        const uint32_t tilesPerRow = (pitch + columns - 1) / columns;
         const uint32_t tileRows = (endTile - key.baseTile + tilesPerRow - 1) / tilesPerRow;
         const uint32_t rows = tileRows * rowsPerTile + 8;
         return rows >= target.height ? 0 : rows;

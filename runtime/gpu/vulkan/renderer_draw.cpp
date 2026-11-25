@@ -1174,6 +1174,21 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
     }
     gpu::detail::SetCurrentDrawStage("Draw_EnsurePipeline");
     bool newPipeline = false;
+    // A pipeline not built yet is built on the warm-up worker and the draw is skipped until it
+    // is (the object shows a frame or a few late) instead of freezing the frame for the compile.
+    if (ShadersAsync())
+    {
+        static const bool syncPipelines = env::Flag("PES17_SYNC_PIPELINES");
+        if (!syncPipelines && !FindPipeline(key))
+        {
+            EnqueuePipelineWarmup({ key.vertexShader, key.pixelShader, uint32_t(colourTarget->format),
+                                    uint32_t(depthTarget->format), key.topology, depthControl, key.blendControl,
+                                    key.colourMask, modeCntl, key.samples }, true);
+            g.shadersPending++;
+            Skip("pipeline being built");
+            return;
+        }
+    }
     VkPipeline built = [&] { Stopwatch watch(g.pipelineNanoseconds);
                              return EnsurePipeline(key, *vertex, *pixel, &newPipeline); }();
     if (!built) { Skip("pipeline rejected"); return; }
