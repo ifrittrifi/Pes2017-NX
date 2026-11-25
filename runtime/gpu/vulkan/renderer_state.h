@@ -311,6 +311,7 @@ namespace vk::renderer::detail
         bool skipFrame = false;
         uint32_t skipRun = 0;
         uint64_t swapTick = 0, lastWriteBackTick = 0, skippedFrames = 0;
+        bool autoDump = false;   // a stretch of slow frames asks for one frame dump (Swap -> DumpRequested)
         // The scale of the surface the open pass draws into.
         float currentScale = 1.0f;
 

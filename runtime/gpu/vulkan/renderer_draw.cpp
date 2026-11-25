@@ -86,6 +86,12 @@ namespace vk::renderer::detail
     // seconds without a break -- a moment of the match, with no one at the files.
     bool DumpRequested()
     {
+        if (g.autoDump)
+        {
+            g.autoDump = false;
+            LOGW("DUMP asked for by a stretch of slow frames");
+            return true;
+        }
 #ifdef __SWITCH__
         // L3+R3 (both sticks pressed in) during a match: one frame, at most one every 10 s.
         {

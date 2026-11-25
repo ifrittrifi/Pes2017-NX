@@ -894,6 +894,46 @@ void vk::renderer::Swap(uint32_t frontBuffer)
             LOGW("DUMP frame begins (swap to %08X)", frontBuffer);
         }
     }
+    // Slow stretches. The time between swaps, with what the frame did: one line per spike
+    // says why (shaders still being built, write-backs, a GPU that fell behind), and a run
+    // of slow frames takes a frame dump by itself, so one session records the entrance, the
+    // celebration and the high ball without anyone pressing a button.
+    // PES17_SPIKE_MS (70), PES17_AUTO_DUMP (on; at most 6 a session, 20 s apart).
+    {
+        using Clock = std::chrono::steady_clock;
+        static Clock::time_point last{};
+        static double recent[4] = {};
+        static uint32_t slot = 0, logged = 0, dumps = 0;
+        static uint64_t pPending = 0, pWb = 0, pDraws = 0, pRec = 0, pSkipped = 0, lastLogTick = 0, lastDumpTick = 0;
+        static const double spikeMs = std::max(20.0, env::Real("PES17_SPIKE_MS", 70.0));
+        static const bool autoDumps = env::Real("PES17_AUTO_DUMP", 1.0) > 0.0;
+        const auto now = Clock::now();
+        const auto delta = [](uint64_t cur, uint64_t before) { return cur >= before ? cur - before : cur; };
+        if (last != Clock::time_point{})
+        {
+            const double ms = std::chrono::duration<double, std::milli>(now - last).count();
+            recent[slot++ & 3u] = ms;
+            const double mean = (recent[0] + recent[1] + recent[2] + recent[3]) / 4.0;
+            const uint64_t behind = g.submissionSerial - std::min(g.submissionSerial, detail::CompletedSerial());
+            if (g.swapTick > 600 && ms > spikeMs && logged < 60 && g.swapTick - lastLogTick > 15)
+            {
+                logged++; lastLogTick = g.swapTick;
+                LOGW("spike: %.0f ms between swaps (mean of the last four %.0f): %llu draws (%llu recorded), "
+                     "%llu waited for a shader, %llu write-backs, %llu frames unrendered, gpu %llu submissions behind",
+                     ms, mean, (unsigned long long)delta(g.draws, pDraws), (unsigned long long)delta(g.drawsRecorded, pRec),
+                     (unsigned long long)delta(g.shadersPending, pPending), (unsigned long long)delta(g.windowWriteBacks, pWb),
+                     (unsigned long long)delta(g.skippedFrames, pSkipped), (unsigned long long)behind);
+            }
+            if (autoDumps && dumps < 6 && slot >= 4 && g.swapTick > 1800 && mean > 50.0 && g.swapTick - lastDumpTick > 1200)
+            {
+                dumps++; lastDumpTick = g.swapTick;
+                g.autoDump = true;
+                LOGW("slow stretch: mean %.0f ms over four swaps; a frame dump is taken (%u of 6)", mean, dumps);
+            }
+        }
+        last = now;
+        pPending = g.shadersPending; pWb = g.windowWriteBacks; pDraws = g.draws; pRec = g.drawsRecorded; pSkipped = g.skippedFrames;
+    }
     // Live statistics, always on: what the renderer has done since the last
     // line (on the GPU thread, so the counters need no lock). Draws against
     // draws recorded, and why the rest were skipped, say whether a black or

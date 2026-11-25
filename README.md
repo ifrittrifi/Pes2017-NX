@@ -56,6 +56,7 @@ Yang paling sering dipakai:
 | `pes17_scene_scale` | skala scene (0.8 sekarang); FSR menaikkan ke layar |
 | `pes17_no_crowd` / `pes17_crowd_density` | matikan penonton, atau kepadatan 0.25–1 (default 0.5) |
 | `pes17_shadow_strength` | gelap bayangan pemain |
+| `pes17_spike_ms` / `pes17_auto_dump` | catat lonjakan (ms antar swap) dengan penyebabnya; dump frame otomatis (maks 6) saat beberapa frame berturut-turut lambat |
 | `pes17_frame_skip` | lompat frame bergantian saat GPU tertinggal (mengurangi slow motion) |
 | `pes17_cpu_mhz` / `pes17_gpu_mhz` / `pes17_mem_mhz`, `pes17_clocks` | clock dari dalam game |
 

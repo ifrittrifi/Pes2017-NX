@@ -174,7 +174,7 @@ void platform::Initialise()
                 "; nilai on/off: true atau false. baris yang diawali ; atau # tidak aktif.\n\n"
                 "[log]\npes17_report=true\npes17_gpu_timing=true\n;pes17_fps_counter=true\n\n"
                 "[graphics]\n;pes17_scene_scale=0.8\n;pes17_upscaler=fsr\n;pes17_shadow_strength=2\n"
-                ";pes17_no_msaa=false\n;pes17_no_crowd=false\n;pes17_crowd_density=0.5\n\n"
+                ";pes17_no_msaa=false\n;pes17_no_crowd=false\n;pes17_crowd_density=0.5\n;pes17_spike_ms=70\n;pes17_auto_dump=true\n\n"
                 "[clocks]\n;pes17_clocks=true\n;pes17_cpu_mhz=1785\n;pes17_gpu_mhz=614\n;pes17_mem_mhz=1600\n\n"
                 "[performance]\n;pes17_frame_skip=true\n\n"
                 "[shader]\n;pes17_sync_shaders=false\n;pes17_sync_pipelines=false\n;pes17_sync_vertex=false\n"
