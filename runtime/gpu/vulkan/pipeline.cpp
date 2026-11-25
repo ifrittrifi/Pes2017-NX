@@ -54,6 +54,21 @@ void vk::pipeline::OnDeviceLost(void (*)(const char*)) {}
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#include <cerrno>
+#include <sys/stat.h>
+namespace
+{
+    // The folder a cache file goes in, made if it is not there (the file open fails without it).
+    void MakeCacheFolder(const std::string& file)
+    {
+        const size_t slash = file.find_last_of('/');
+        if (slash == std::string::npos) return;
+        const std::string folder = file.substr(0, slash);
+        if (mkdir(folder.c_str(), 0777) != 0 && errno != EEXIST)
+            LOGW("cache: cannot make the folder %s (errno %d)", folder.c_str(), errno);
+    }
+}
 #include <string>
 #include <vector>
 #include "../../env.h"
@@ -416,6 +431,7 @@ namespace
         static std::mutex fileMutex;
         std::lock_guard fileLock(fileMutex);
         std::string tmpPath = std::string(path) + ".tmp";
+        MakeCacheFolder(tmpPath);
         if (std::FILE* f = std::fopen(tmpPath.c_str(), "wb"))
         {
             const size_t writtenHdr = std::fwrite(&header, sizeof(header), 1, f);

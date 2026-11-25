@@ -2,6 +2,21 @@
 // rebuilds a previous run's pipelines before the title asks for them.
 #include "renderer_state.h"
 #include <cstring>
+
+#include <cerrno>
+#include <sys/stat.h>
+namespace
+{
+    // The folder a cache file goes in, made if it is not there (the file open fails without it).
+    void MakeCacheFolder(const std::string& file)
+    {
+        const size_t slash = file.find_last_of('/');
+        if (slash == std::string::npos) return;
+        const std::string folder = file.substr(0, slash);
+        if (mkdir(folder.c_str(), 0777) != 0 && errno != EEXIST)
+            LOGW("cache: cannot make the folder %s (errno %d)", folder.c_str(), errno);
+    }
+}
 #include "../internal.h"
 #include "../../diagnostics.h"
 #include "../../log.h"
@@ -791,8 +806,13 @@ namespace vk::renderer::detail
         void Write(const std::vector<uint8_t>& blob, const std::string& path, uint32_t shaders, uint32_t pipelines)
         {
             const std::string tmpPath = path + ".tmp";
+            MakeCacheFolder(tmpPath);
             std::FILE* file = std::fopen(tmpPath.c_str(), "wb");
-            if (!file) return;
+            if (!file)
+            {
+                LOGW("renderer: cannot write the shader cache %s (errno %d)", tmpPath.c_str(), errno);
+                return;
+            }
             bool writeOk = std::fwrite(blob.data(), 1, blob.size(), file) == blob.size();
             if (std::fclose(file) != 0) writeOk = false;
             if (!writeOk)
