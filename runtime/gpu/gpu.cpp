@@ -165,6 +165,19 @@ namespace
                 if (g.rptrWriteBack) *GuestPtr<be32>(g.rptrWriteBack) = g.ring.readIndex;
                 continue;
             }
+            // The title waits on fences the consumer retires, five times a frame: a wake from a
+            // sleep costs the console about a millisecond each. Look for new work for a moment
+            // (yielding to other threads) before going to sleep.
+            {
+                const auto until = std::chrono::steady_clock::now() + std::chrono::microseconds(500);
+                bool found = false;
+                while (std::chrono::steady_clock::now() < until && g.running.load(std::memory_order_relaxed))
+                {
+                    if ((*GuestPtr<be32>(kCpRbWptr) & g.ring.mask) != g.ring.readIndex) { found = true; break; }
+                    std::this_thread::yield();
+                }
+                if (found) continue;
+            }
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
         g.consumerStopped = std::chrono::steady_clock::now();
