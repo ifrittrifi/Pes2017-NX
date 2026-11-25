@@ -1077,10 +1077,12 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
         // PES17_CROWD_DENSITY (0.25-1, 0.5 by default): the crowd's two billboard passes draw this
         // share of their people. Both passes split their quads the same way, so the same quads
         // are dropped in both G-buffers, every frame (no flicker). The passes were 5.5 ms of GPU.
-        static const uint32_t keepOfFour = [] {
+        if (!g.crowdKeepMax)
+        {
             const double d = std::clamp(env::Real("PES17_CROWD_DENSITY", 0.5), 0.25, 1.0);
-            return uint32_t(std::lround(d * 4.0));
-        }();
+            g.crowdKeepMax = g.crowdKeep = uint32_t(std::lround(d * 4.0));
+        }
+        const uint32_t keepOfFour = g.crowdKeep;
         const bool thin = keepOfFour < 4 && ((call.pixelHash >> 40) == 0xB4BBEAull || (call.pixelHash >> 40) == 0x70F64Aull);
         uint32_t kept = 0;
         for (uint32_t q = 0; q < quads; q++)

@@ -934,6 +934,32 @@ void vk::renderer::Swap(uint32_t frontBuffer)
         last = now;
         pPending = g.shadersPending; pWb = g.windowWriteBacks; pDraws = g.draws; pRec = g.drawsRecorded; pSkipped = g.skippedFrames;
     }
+    // Crowd density follows the load (PES17_CROWD_ADAPTIVE, on): when the GPU stays two or
+    // more submissions behind for a while, the crowd's billboards thin out by a quarter of
+    // the configured density, down to a quarter; when it has kept up for a longer while they
+    // come back. It moves between frames, so both G-buffer passes always agree, and never
+    // faster than every five seconds.
+    {
+        static const bool adaptive = env::Real("PES17_CROWD_ADAPTIVE", 1.0) > 0.0;
+        static uint32_t heavy = 0, calm = 0, since = 0;
+        if (adaptive && g.crowdKeepMax && g.swapTick > 600)
+        {
+            const uint64_t behind = g.submissionSerial - std::min(g.submissionSerial, detail::CompletedSerial());
+            ++since;
+            if (behind >= 2) { ++heavy; calm = 0; }
+            else if (behind == 0) { ++calm; heavy = 0; }
+            if (heavy > 40 && since > 300 && g.crowdKeep > 1)
+            {
+                g.crowdKeep--; since = 0; heavy = 0;
+                LOGW("crowd: %u of 4 quads kept (the gpu is behind)", g.crowdKeep);
+            }
+            else if (calm > 600 && since > 600 && g.crowdKeep < g.crowdKeepMax)
+            {
+                g.crowdKeep++; since = 0; calm = 0;
+                LOGW("crowd: %u of 4 quads kept (the gpu keeps up)", g.crowdKeep);
+            }
+        }
+    }
     // Live statistics, always on: what the renderer has done since the last
     // line (on the GPU thread, so the counters need no lock). Draws against
     // draws recorded, and why the rest were skipped, say whether a black or
