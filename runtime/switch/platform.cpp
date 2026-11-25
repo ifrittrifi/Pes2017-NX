@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <chrono>
 #include <cstring>
 #include "profiler_nx.h"
@@ -179,7 +180,19 @@ void platform::Initialise()
             value[std::strcspn(value, "\r\n")] = '\0';
             for (char* end = equals; end > text && (end[-1] == ' ' || end[-1] == '\t'); --end) end[-1] = '\0';
             while (*value == ' ' || *value == '\t') ++value;
-            if (*text) setenv(text, value, 1);
+            if (!*text) continue;
+            // Lower case keys (pes17_report=true) are the file's own; true/false stand for 1/0.
+            for (char* c = text; *c; ++c) *c = char(std::toupper(static_cast<unsigned char>(*c)));
+            for (char* end = value + std::strlen(value); end > value && (end[-1] == ' ' || end[-1] == '\t'); --end) end[-1] = '\0';
+            const auto is = [&](const char* word) {
+                const char* a = value;
+                for (; *a && *word; ++a, ++word)
+                    if (std::tolower(static_cast<unsigned char>(*a)) != *word) return false;
+                return !*a && !*word;
+            };
+            if (is("true") || is("on") || is("yes")) value = const_cast<char*>("1");
+            else if (is("false") || is("off") || is("no")) value = const_cast<char*>("0");
+            setenv(text, value, 1);
         }
         std::fclose(env);
     }
