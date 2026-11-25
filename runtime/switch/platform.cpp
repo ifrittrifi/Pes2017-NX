@@ -160,11 +160,10 @@ void platform::Initialise()
         }
     }
 
-    // Settings without a rebuild: sdmc:/switch/pes2017/config.ini (env.txt if there is none),
+    // Settings without a rebuild: sdmc:/switch/pes2017/config.ini (made with its defaults when there is none),
     // KEY=VALUE a line (# or ; starts a comment, [sections] are ignored), read before anything
     // looks at its variables.
     FILE* env = std::fopen("sdmc:/switch/pes2017/config.ini", "r");
-    if (!env) env = std::fopen("sdmc:/switch/pes2017/env.txt", "r");
     if (!env)
     {
         // First run: write the settings file with its defaults, for the player to edit.
