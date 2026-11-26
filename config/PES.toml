@@ -235,6 +235,9 @@ functions = [
 # --- fix_ladders begin ---
     { address = 0x83911928, size = 0x4C },
 # --- fix_ladders end ---
+    # found from a crash log: vtable-only leaf functions that the enclosing function swallowed
+    { address = 0x8285BB98, size = 0x20 },
+    { address = 0x8285BBB8, size = 0x94 },
 ]
 
 

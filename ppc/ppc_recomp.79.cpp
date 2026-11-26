@@ -10188,6 +10188,16 @@ loc_8285BB84:
 	// b 0x831cdb24
 	__restgprlr_23(ctx, base);
 	return;
+}
+
+__attribute__((alias("__imp__sub_8285BB98"))) PPC_WEAK_FUNC(sub_8285BB98);
+PPC_FUNC_IMPL(__imp__sub_8285BB98) {
+	PPC_FUNC_PROLOGUE();
+	PPCRegister ctr{};
+	PPCXERRegister xer{};
+	PPCCRRegister cr6{};
+	PPCRegister temp{};
+	uint32_t ea{};
 	// lwz r11,2348(r4)
 	ctx.r11.u64 = PPC_LOAD_U32(ctx.r4.u32 + 2348);
 	// lis r10,4352
@@ -10204,6 +10214,16 @@ loc_8285BB84:
 	ctx.r3.s64 = 1;
 	// blr 
 	return;
+}
+
+__attribute__((alias("__imp__sub_8285BBB8"))) PPC_WEAK_FUNC(sub_8285BBB8);
+PPC_FUNC_IMPL(__imp__sub_8285BBB8) {
+	PPC_FUNC_PROLOGUE();
+	PPCRegister ctr{};
+	PPCXERRegister xer{};
+	PPCCRRegister cr6{};
+	PPCRegister temp{};
+	uint32_t ea{};
 	// lhz r10,2364(r5)
 	ctx.r10.u64 = PPC_LOAD_U16(ctx.r5.u32 + 2364);
 	// li r11,0
