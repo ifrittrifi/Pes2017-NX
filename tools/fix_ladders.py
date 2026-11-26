@@ -10,11 +10,11 @@ the generated C++ instead, so it is a check that runs in seconds.
 
 For each offending function F with outside targets T, the fix is a `functions`
 entry covering F up to the first function start after the highest target, so the
-targets become interior labels. The entries are merged into config/PES.toml
+targets become interior labels. The entries are merged into config/pes2017.toml
 between marker comments, replacing the previous batch; run build.sh's loop
 (recompile -> this tool) until it reports nothing.
 
-usage: fix_ladders.py <ppc-dir> [--apply config/PES.toml]
+usage: fix_ladders.py <ppc-dir> [--apply config/pes2017.toml]
 """
 import bisect, glob, re, sys
 import title

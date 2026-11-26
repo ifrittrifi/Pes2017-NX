@@ -8,7 +8,7 @@ BASE = 0x82000000
 
 TITLES = {
     "sp": dict(xex="pes/default.xex", image="pes/default.pe", ppc="ppc",
-               toml="config/PES.toml", tables="config/pes_switch_tables.toml", build="build",
+               toml="config/pes2017.toml", tables="config/pes_switch_tables.toml", build="build",
                syms="config/pes_symbols.txt"),
 }
 NAME = "sp"

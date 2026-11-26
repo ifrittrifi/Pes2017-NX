@@ -17,7 +17,7 @@ front half of one, and a PES 2017 runtime.
 |---|---|
 | XEX → PE | `pes/default.pe`: retail-encrypted, basic-compressed XEX2 decoded by `tools/xexdump.py`; PPC big-endian, image base `0x82000000`, entry `0x82416708`, `.text` `0x823F0000`+`0x1986684` (25 MB), 73,078 `.pdata` functions |
 | Jump tables | `config/pes_switch_tables.toml`: 1,327 tables from XenonAnalyse; 3 over-long ones trimmed by `tools/trim_switch_tables.py` |
-| Prologue helpers | save/rest GPR/FPR/VMX addresses located by byte pattern, in `config/PES.toml` |
+| Prologue helpers | save/rest GPR/FPR/VMX addresses located by byte pattern, in `config/pes2017.toml` |
 | Function bounds | 205 leaf functions whose jump tables XenonAnalyse ended early (`tools/fixbounds.py`) plus one `bdzf` ladder (`tools/fix_ladders.py`); `build.sh` loops recompile → fix until nothing changes |
 | Recompile | `ppc/`: 0 switch-table errors; 44 undecodable words at the tail of `.text` (data after the last function, `0x83D76674`…) |
 | Kernel imports | 281 used by the game; 168 implemented by the runtime, 113 stubbed with a log-once stub (`ppc/stubs_generated.cpp`) |
@@ -287,7 +287,7 @@ RECOMPILE_ONLY=1 GAME=../GAME ./build.sh  # generate ppc/ only
 ```
 
 If the executable ever changes (another region or a new version), delete
-the two generated blocks in `config/PES.toml` (`fixbounds`, `fix_ladders`) and
+the two generated blocks in `config/pes2017.toml` (`fixbounds`, `fix_ladders`) and
 run `build.sh` again; it re-derives them.
 
 ## Legal

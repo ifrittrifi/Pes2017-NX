@@ -19,7 +19,7 @@ The vmx_14 pair is not always matchable by its own bytes (the compiler may
 schedule the `li` differently); it is derived from the vmx_64 pair, which lies a
 fixed 0x94 bytes (18 registers x 2 instructions + blr) after it.
 
-usage: find_helpers.py [--write config/PES.toml]
+usage: find_helpers.py [--write config/pes2017.toml]
 Exits non-zero when a helper is missing or found more than once.
 """
 import re, struct, sys

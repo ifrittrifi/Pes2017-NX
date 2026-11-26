@@ -100,7 +100,7 @@ switch_input::State switch_input::Poll()
     if (raw & HidNpadButton_Y) out.buttons |= kButtonX;
     if (raw & HidNpadButton_X) out.buttons |= kButtonY;
 
-    // LoadInputConfig() reads [input] from config/PES.toml before the guest
+    // LoadInputConfig() reads [input] from config/pes2017.toml before the guest
     // starts. The two pairs are deliberately independent.
     const settings::InputOptions options = settings::GetInputOptions();
     out.buttons = ApplyFaceButtonSwaps(out.buttons, options.swapAB, options.swapXY);

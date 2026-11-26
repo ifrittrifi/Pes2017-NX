@@ -63,7 +63,7 @@ python3 tools/fix_switch_regs.py config/pes_switch_tables.toml --apply >/dev/nul
 python3 tools/find_missed_switches.py config/pes_switch_tables.toml config/pes_switch_extra.toml
 cat config/pes_switch_extra.toml >> config/pes_switch_tables.toml
 echo "    tables: $(grep -c '^\[\[switch\]\]' config/pes_switch_tables.toml)"
-python3 tools/find_helpers.py --write config/PES.toml >/dev/null
+python3 tools/find_helpers.py --write config/pes2017.toml >/dev/null
 
 # The recompiler needs function bounds the analyser cannot derive. Two checks
 # find them from its own output and feed them back; each pass can only grow a
@@ -73,7 +73,7 @@ python3 tools/find_helpers.py --write config/PES.toml >/dev/null
 echo "==> 7. recompile PPC -> C++ (profile: $PROFILE)"
 python3 - "$CFG" $LOCALS <<'PY'
 import re, sys
-s = open("config/PES.toml").read()
+s = open("config/pes2017.toml").read()
 for key in sys.argv[2:]:
     s = re.sub(rf"^{key} = false", f"{key} = true", s, flags=re.M)
 open(sys.argv[1], "w").write(s)
@@ -82,14 +82,14 @@ for pass in 1 2 3 4 5; do
     rm -rf ppc && mkdir ppc
     ( cd config && ../$XENON/build/XenonRecomp/XenonRecomp PES.active.toml ../$XENON/XenonUtils/ppc_context.h ) >logs-recomp.txt 2>&1
     changed=0
-    python3 tools/fixbounds.py config/pes_switch_tables.toml logs-recomp.txt --apply config/PES.toml >/dev/null || changed=1
-    python3 tools/fix_ladders.py ppc --apply config/PES.toml >/dev/null 2>&1 || changed=1
+    python3 tools/fixbounds.py config/pes_switch_tables.toml logs-recomp.txt --apply config/pes2017.toml >/dev/null || changed=1
+    python3 tools/fix_ladders.py ppc --apply config/pes2017.toml >/dev/null 2>&1 || changed=1
     echo "    pass $pass: jump-table errors $(grep -c 'trying to jump outside function' logs-recomp.txt || true)," \
          "undecodable words $(grep -c 'Unable to decode' logs-recomp.txt || true)$([ $changed = 1 ] && echo ', bounds changed -> again')"
     [ $changed = 0 ] && break
     python3 - "$CFG" $LOCALS <<'PY'
 import re, sys
-s = open("config/PES.toml").read()
+s = open("config/pes2017.toml").read()
 for key in sys.argv[2:]:
     s = re.sub(rf"^{key} = false", f"{key} = true", s, flags=re.M)
 open(sys.argv[1], "w").write(s)

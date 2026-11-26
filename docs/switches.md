@@ -22,7 +22,7 @@ them as unset whatever the environment says, and also drops the keys `F7`, `F10`
 ## Controller layout (Nintendo Switch)
 
 The Switch port reads the two independent face-button options from
-`config/PES.toml`, under `[input]`. Both values are TOML booleans (not 1/0):
+`config/pes2017.toml`, under `[input]`. Both values are TOML booleans (not 1/0):
 
 ```toml
 [input]
@@ -32,7 +32,7 @@ swap_x_y = false
 
 Set either value to `true` to swap only that pair. The Nintendo-to-Xbox
 physical layout translation happens first; these options then swap the logical
-Xbox A/B or X/Y pair. The file is read from the executable/install folder's `config/PES.toml` path.
+Xbox A/B or X/Y pair. The file is read from the executable/install folder's `config/pes2017.toml` path.
 Missing keys and invalid non-boolean values default to `false`.
 
 ## Running

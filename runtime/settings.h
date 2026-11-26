@@ -14,7 +14,7 @@ namespace settings
     // Imports PES17_* entries from the legacy runtime .env file.
     std::string Load(const std::filesystem::path& file);
 
-    // Reads the [input] table from config/PES.toml. Missing or invalid
+    // Reads the [input] table from config/pes2017.toml. Missing or invalid
     // boolean values retain the safe default (false).
     bool LoadInputConfig(const std::filesystem::path& file);
     InputOptions GetInputOptions();

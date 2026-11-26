@@ -215,7 +215,17 @@ int pes17::Run(int argc, char** argv)
     // The Switch face-button options live beside the recompiled title config.
     // Load them before the first XInput poll; the two pairs remain independent.
 #ifdef __SWITCH__
-    settings::LoadInputConfig(install::Folder(argc, argv) / "config/PES.toml");
+    {
+        // The file used to be config/PES.toml; an old copy on the card is still read.
+        auto configPath = install::Folder(argc, argv) / "config/pes2017.toml";
+        std::error_code configError;
+        if (!std::filesystem::exists(configPath, configError))
+        {
+            const auto old = install::Folder(argc, argv) / "config/PES.toml";
+            if (std::filesystem::exists(old, configError)) configPath = old;
+        }
+        settings::LoadInputConfig(configPath);
+    }
 #endif
 
     // Before any switch is read, the log's among them.
