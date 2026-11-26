@@ -898,12 +898,12 @@ void vk::renderer::Swap(uint32_t frontBuffer)
     // says why (shaders still being built, write-backs, a GPU that fell behind), and a run
     // of slow frames takes a frame dump by itself, so one session records the entrance, the
     // celebration and the high ball without anyone pressing a button.
-    // PES17_SPIKE_MS (70), PES17_AUTO_DUMP (on; at most 6 a session, 20 s apart).
+    // PES17_SPIKE_MS (70), PES17_AUTO_DUMP (on; at most 12 a session, one for each kind of scene, 15 s apart).
     {
         using Clock = std::chrono::steady_clock;
         static Clock::time_point last{};
         static double recent[4] = {};
-        static uint32_t slot = 0, logged = 0, dumps = 0;
+        static uint32_t slot = 0, logged = 0, dumps = 0, seenBuckets = 0;
         static uint64_t pPending = 0, pWb = 0, pDraws = 0, pRec = 0, pSkipped = 0, lastLogTick = 0, lastDumpTick = 0;
         static const double spikeMs = std::max(20.0, env::Real("PES17_SPIKE_MS", 70.0));
         static const bool autoDumps = env::Real("PES17_AUTO_DUMP", 1.0) > 0.0;
@@ -924,11 +924,18 @@ void vk::renderer::Swap(uint32_t frontBuffer)
                      (unsigned long long)delta(g.shadersPending, pPending), (unsigned long long)delta(g.windowWriteBacks, pWb),
                      (unsigned long long)delta(g.skippedFrames, pSkipped), (unsigned long long)behind);
             }
-            if (autoDumps && dumps < 6 && slot >= 4 && g.swapTick > 1800 && mean > 50.0 && g.swapTick - lastDumpTick > 1200)
+            // One dump for each kind of heavy scene: the bucket is the draws the frame recorded
+            // (the entrance, the match and the celebration differ in that), and a frame that
+            // recorded almost nothing is a load or a stall, not a scene to look at.
+            const uint64_t recorded = delta(g.drawsRecorded, pRec);
+            const uint32_t bucket = uint32_t(std::min<uint64_t>(recorded / 150, 31));
+            if (autoDumps && dumps < 12 && slot >= 4 && g.swapTick > 1800 && mean > 40.0 && recorded >= 150 &&
+                g.swapTick - lastDumpTick > 900 && !(seenBuckets >> bucket & 1u))
             {
-                dumps++; lastDumpTick = g.swapTick;
+                dumps++; lastDumpTick = g.swapTick; seenBuckets |= 1u << bucket;
                 g.autoDump = true;
-                LOGW("slow stretch: mean %.0f ms over four swaps; a frame dump is taken (%u of 6)", mean, dumps);
+                LOGW("slow stretch: mean %.0f ms over four swaps, %llu draws recorded (scene %u); a frame dump is taken (%u of 12)",
+                     mean, (unsigned long long)recorded, bucket, dumps);
             }
         }
         last = now;

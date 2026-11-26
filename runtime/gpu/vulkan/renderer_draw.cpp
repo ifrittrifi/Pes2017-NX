@@ -97,7 +97,7 @@ namespace vk::renderer::detail
         {
             static auto lastCombo = std::chrono::steady_clock::time_point{};
             static int combos = 0;
-            if (switch_input::DumpComboHeld() && combos < 3)
+            if (switch_input::DumpComboHeld() && combos < 6)
             {
                 const auto now = std::chrono::steady_clock::now();
                 if (lastCombo == std::chrono::steady_clock::time_point{} || now - lastCombo > std::chrono::seconds(10))
