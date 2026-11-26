@@ -311,7 +311,8 @@ namespace vk::renderer::detail
         bool skipFrame = false;
         uint32_t skipRun = 0;
         uint64_t swapTick = 0, lastWriteBackTick = 0, skippedFrames = 0;
-        uint32_t crowdKeep = 0, crowdKeepMax = 0;   // crowd quads kept per four (1-4); set on the first crowd draw, moved by Swap
+        uint32_t crowdKeep = 0, crowdKeepMax = 0;
+        uint64_t lastDumpTick = 0;   // swap at which the last frame dump was taken
         bool autoDump = false;   // a stretch of slow frames asks for one frame dump (Swap -> DumpRequested)
         // The scale of the surface the open pass draws into.
         float currentScale = 1.0f;

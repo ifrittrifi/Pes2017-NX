@@ -90,6 +90,7 @@ namespace vk::renderer::detail
         {
             g.autoDump = false;
             LOGW("DUMP asked for by a stretch of slow frames");
+            g.lastDumpTick = g.swapTick;
             return true;
         }
 #ifdef __SWITCH__
@@ -105,6 +106,7 @@ namespace vk::renderer::detail
                     lastCombo = now;
                     combos++;
                     LOGW("DUMP asked for with L3+R3");
+                    g.lastDumpTick = g.swapTick;
                     return true;
                 }
             }

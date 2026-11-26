@@ -915,7 +915,10 @@ void vk::renderer::Swap(uint32_t frontBuffer)
             recent[slot++ & 3u] = ms;
             const double mean = (recent[0] + recent[1] + recent[2] + recent[3]) / 4.0;
             const uint64_t behind = g.submissionSerial - std::min(g.submissionSerial, detail::CompletedSerial());
-            if (g.swapTick > 600 && ms > spikeMs && logged < 60 && g.swapTick - lastLogTick > 15)
+            // The frames just after a dump are slow because of the dump (it writes tens of MB), so
+            // they say nothing about the game.
+            const bool afterDump = g.lastDumpTick && g.swapTick - g.lastDumpTick < 400;
+            if (!afterDump && g.swapTick > 600 && ms > spikeMs && logged < 60 && g.swapTick - lastLogTick > 15)
             {
                 logged++; lastLogTick = g.swapTick;
                 LOGW("spike: %.0f ms between swaps (mean of the last four %.0f): %llu draws (%llu recorded), "
@@ -929,7 +932,7 @@ void vk::renderer::Swap(uint32_t frontBuffer)
             // recorded almost nothing is a load or a stall, not a scene to look at.
             const uint64_t recorded = delta(g.drawsRecorded, pRec);
             const uint32_t bucket = uint32_t(std::min<uint64_t>(recorded / 150, 31));
-            if (autoDumps && dumps < 12 && slot >= 4 && g.swapTick > 1800 && mean > 40.0 && recorded >= 150 &&
+            if (autoDumps && !afterDump && dumps < 12 && slot >= 4 && g.swapTick > 1800 && mean > 40.0 && recorded >= 150 &&
                 g.swapTick - lastDumpTick > 900 && !(seenBuckets >> bucket & 1u))
             {
                 dumps++; lastDumpTick = g.swapTick; seenBuckets |= 1u << bucket;
