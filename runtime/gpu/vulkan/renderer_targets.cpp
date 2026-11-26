@@ -290,7 +290,7 @@ namespace vk::renderer::detail
             }
             {
                 static std::atomic<int> told{ 0 };
-                if (told.fetch_add(1, std::memory_order_relaxed) < 40)
+                if (told.fetch_add(1, std::memory_order_relaxed) < 40 || (g.frames > 8000 && g.frames % 600 < 3))
                     LOGI("clears: whole depth image: tile %u pitch %u samples %u format %u, %ux%u, up to tile %u",
                          key.baseTile, key.pitch, key.samples, key.format, target.width, target.height, endTile);
             }
@@ -349,7 +349,7 @@ namespace vk::renderer::detail
             if (ClearRows(target, RowsReached(key, target, endTile), false, 0.0f, true, value, true)) continue;
             {
                 static std::atomic<int> told{ 0 };
-                if (told.fetch_add(1, std::memory_order_relaxed) < 40)
+                if (told.fetch_add(1, std::memory_order_relaxed) < 40 || (g.frames > 8000 && g.frames % 600 < 3))
                     LOGI("clears: whole stencil image: tile %u pitch %u samples %u format %u, %ux%u, up to tile %u",
                          key.baseTile, key.pitch, key.samples, key.format, target.width, target.height, endTile);
             }
@@ -397,7 +397,7 @@ namespace vk::renderer::detail
             if (ClearRows(target, RowsReached(key, target, endTile), true, 0.0f, false, 0)) continue;
             {
                 static std::atomic<int> told{ 0 };
-                if (told.fetch_add(1, std::memory_order_relaxed) < 40)
+                if (told.fetch_add(1, std::memory_order_relaxed) < 40 || (g.frames > 8000 && g.frames % 600 < 3))
                     LOGI("clears: whole colour image: tile %u pitch %u samples %u format %u, %ux%u, up to tile %u",
                          key.baseTile, key.pitch, key.samples, key.format, target.width, target.height, endTile);
             }
