@@ -20,7 +20,7 @@ PROFILE=${PROFILE:-balanced}
 CMAKE_CC=${CMAKE_CC:-/usr/bin/clang}; CMAKE_CXX=${CMAKE_CXX:-/usr/bin/clang++}
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN)}   # every core; override with JOBS=n
 unset PYTHONPATH PYTHONHOME   # tools/*.py import title.py from their own directory
-CFG=config/PES.active.toml
+CFG=config/pes2017.active.toml
 
 case "$PROFILE" in
     safe)       LOCALS="" ;;
@@ -80,7 +80,7 @@ open(sys.argv[1], "w").write(s)
 PY
 for pass in 1 2 3 4 5; do
     rm -rf ppc && mkdir ppc
-    ( cd config && ../$XENON/build/XenonRecomp/XenonRecomp PES.active.toml ../$XENON/XenonUtils/ppc_context.h ) >logs-recomp.txt 2>&1
+    ( cd config && ../$XENON/build/XenonRecomp/XenonRecomp pes2017.active.toml ../$XENON/XenonUtils/ppc_context.h ) >logs-recomp.txt 2>&1
     changed=0
     python3 tools/fixbounds.py config/pes_switch_tables.toml logs-recomp.txt --apply config/pes2017.toml >/dev/null || changed=1
     python3 tools/fix_ladders.py ppc --apply config/pes2017.toml >/dev/null 2>&1 || changed=1
