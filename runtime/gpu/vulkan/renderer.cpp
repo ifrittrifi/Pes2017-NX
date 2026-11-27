@@ -247,7 +247,11 @@ bool vk::renderer::Initialise()
             {
                 const uint32_t limit = frame_rate::Limit();
                 const double period = 1000.0 / double(limit ? std::min(limit, 240u) : 60u);
-                g.dynScale.Configure(int(std::lround(g.sceneScale * 16.0f)), 8, period * 0.78);
+                // PES17_SCALE_FLOOR (sixteenths of 1280x720, 4-16) and PES17_SCALE_BUDGET_MS (the passes'
+                // GPU time kept under, per frame that drew the world) override the two defaults.
+                const int floor = int(std::clamp(env::Real("PES17_SCALE_FLOOR", 8.0), 4.0, 16.0));
+                const double budget = env::Real("PES17_SCALE_BUDGET_MS", period * 0.78);
+                g.dynScale.Configure(int(std::lround(g.sceneScale * 16.0f)), floor, budget);
                 g.dynScale.SetRules(g.heatScale, g.loadScale);
                 g.dynScale.SetThermal(g.thermalStatus.load());
                 LOGI("renderer: the scene scale moves with %s%s%s: %u/16 to %u/16, passes under %.1f ms",
