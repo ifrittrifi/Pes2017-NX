@@ -172,7 +172,7 @@ void platform::Initialise()
             std::fputs(
                 "[log]\npes2017_report=true\npes2017_gpu_timing=true\npes2017_fps_counter=true\npes2017_spike_ms=70\npes2017_auto_dump=false\n\n"
                 "[resolution]\npes2017_resolution=0.8\npes2017_upscaler=fsr\npes2017_resolution_adaptive=true\npes2017_resolution_floor=8\npes2017_resolution_budget_ms=22\n\n"
-                "[graphics]\npes2017_no_msaa=false\npes2017_shadow_strength=1.5\n\n"
+                "[graphics]\npes2017_no_msaa=false\npes2017_shadow_strength=1.5\n;pes2017_no_zcull=false\n\n"
                 "[crowd]\npes2017_no_crowd=false\npes2017_crowd_percent=30\npes2017_crowd_adaptive=true\n\n"
                 "[clocks]\npes2017_clocks=true\npes2017_cpu_mhz=1224\npes2017_gpu_mhz=614\npes2017_mem_mhz=1600\n\n"
                 "[performance]\npes2017_frame_skip=true\n\n"

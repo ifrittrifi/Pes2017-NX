@@ -174,6 +174,16 @@ namespace vk::renderer::detail
         return rows >= target.height ? 0 : rows;
     }
 
+    // Depth images are cleared by loadOp (dynamic rendering) and carry no TRANSFER_DST, which is what lets
+    // the driver give them a ZCULL plane: it rejects hidden pixels before their shader runs. A depth image
+    // that is also a transfer destination gets none ("[nvk] ZCULL: NO plane ... incompatible usage").
+    // PES17_NO_ZCULL=1 (pes2017_no_zcull) brings back the transfer clears.
+    bool DepthByRendering()
+    {
+        static const bool off = env::Flag("PES17_NO_ZCULL");
+        return !off && !vk::pipeline::LegacyMode() && dispatch.beginRendering && dispatch.endRendering;
+    }
+
     // A clear of the top `rows` rows only, as a render pass that does nothing but
     // load-clear (dynamic rendering). A whole-image transfer clear of a 2048-row
     // 4x surface is ten million samples, and PES 2017 clears three of them twice
@@ -294,6 +304,13 @@ namespace vk::renderer::detail
                     LOGI("clears: whole depth image: tile %u pitch %u samples %u format %u, %ux%u, up to tile %u",
                          key.baseTile, key.pitch, key.samples, key.format, target.width, target.height, endTile);
             }
+            if (DepthByRendering() && ClearRows(target, target.height, false, depth, clearStencil, stencilValue))
+            {
+                target.clearedAtDraw = g.drawsRecorded;
+                target.depthClearedIn = g.frames;
+                MarkWholeClear(target, true, depth, clearStencil, stencilValue);
+                continue;
+            }
             const VkImageAspectFlags aspect =
                 VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             RecordBarrier(target.image, aspect,
@@ -352,6 +369,11 @@ namespace vk::renderer::detail
                 if (told.fetch_add(1, std::memory_order_relaxed) < 40 || (g.frames > 8000 && g.frames % 600 < 3))
                     LOGI("clears: whole stencil image: tile %u pitch %u samples %u format %u, %ux%u, up to tile %u",
                          key.baseTile, key.pitch, key.samples, key.format, target.width, target.height, endTile);
+            }
+            if (DepthByRendering() && ClearRows(target, target.height, false, 0.0f, true, value, true))
+            {
+                MarkWholeClear(target, false, 0.0f, true, value);
+                continue;
             }
             const VkImageAspectFlags both = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
             RecordBarrier(target.image, both,
@@ -663,7 +685,7 @@ namespace vk::renderer::detail
         // ever write it that way.
         const VkImageUsageFlags usage = key.depth
             ? (VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-               VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+               (DepthByRendering() ? 0 : VK_IMAGE_USAGE_TRANSFER_DST_BIT))
             : (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
         const VkImageAspectFlags aspect = key.depth
@@ -1049,6 +1071,9 @@ namespace vk::renderer::detail
                 const uint32_t packed = r[gpu::RB_DEPTH_CLEAR];
                 VkClearDepthStencilValue value{ float(packed >> 8) / float(0xFFFFFF),
                                                 uint32_t(packed & 0xFF) };
+                if (DepthByRendering() &&
+                    ClearRows(*target, target->height, false, value.depth, true, value.stencil))
+                    return;
                 constexpr VkImageAspectFlags kBoth =
                     VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
                 VkImageSubresourceRange range{ kBoth, 0, 1, 0, 1 };
@@ -1084,6 +1109,40 @@ namespace vk::renderer::detail
         const VkImageAspectFlags aspect = target.depth
             ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
             : VK_IMAGE_ASPECT_COLOR_BIT;
+        if (target.depth && target.view && DepthByRendering())
+        {
+            // By loadOp, not a transfer: the image has no TRANSFER_DST (ZCULL needs that).
+            Barrier(cmd, target.image, aspect, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 0, kDepthAccess,
+                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, kDepthStages);
+            VkRenderingAttachmentInfoKHR attachment{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR };
+            attachment.imageView = target.view;
+            attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            attachment.clearValue.depthStencil = { 0.0f, 0 };   // zero: a level tests GEQUAL
+            VkRenderingInfoKHR rendering{ VK_STRUCTURE_TYPE_RENDERING_INFO_KHR };
+            rendering.renderArea = { { 0, 0 }, { HostOf(target.width, target.scale), HostOf(target.height, target.scale) } };
+            rendering.layerCount = 1;
+            rendering.pDepthAttachment = &attachment;
+            rendering.pStencilAttachment = &attachment;
+            dispatch.beginRendering(cmd, &rendering);
+            dispatch.endRendering(cmd);
+            Barrier(cmd, target.image, aspect, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                    kDepthAccess, kDepthStages, kDepthStages);
+            vkEndCommandBuffer(cmd);
+            VkSubmitInfo once{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+            once.commandBufferCount = 1;
+            once.pCommandBuffers = &cmd;
+            std::lock_guard lock(vk::pipeline::QueueMutex());
+            vkResetFences(g.device, 1, &g.setupFence);
+            vkQueueSubmit(g.queue, 1, &once, g.setupFence);
+            VkResult waited = vkWaitForFences(g.device, 1, &g.setupFence, VK_TRUE, 2000000000ull);
+            if (waited == VK_TIMEOUT) waited = vkWaitForFences(g.device, 1, &g.setupFence, VK_TRUE, UINT64_MAX);
+            vk::pipeline::Failed(waited, "the set-up fence");
+            return;
+        }
         Barrier(cmd, target.image, aspect, VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT,
                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);

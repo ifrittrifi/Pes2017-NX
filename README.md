@@ -56,6 +56,7 @@ Yang paling sering dipakai:
 | `pes2017_resolution` / `pes2017_resolution_adaptive` / `pes2017_resolution_floor` / `pes2017_resolution_budget_ms` | resolusi scene sebagai pecahan dari 1280x720 (0.8 sekarang; FSR menaikkan ke layar); adaptif menurunkannya otomatis saat GPU melewati anggaran ms, sampai batas bawah (dalam 1/16) |
 | `pes2017_no_crowd` / `pes2017_crowd_percent` / `pes2017_crowd_adaptive` | matikan penonton, atau jumlah penonton 1–100 persen (default 30, tersebar acak); adaptif (default hidup) menurunkannya sampai setengah saat GPU tertinggal dan mengembalikannya saat lancar |
 | `pes2017_shadow_strength` | gelap bayangan pemain |
+| `pes2017_no_zcull` | `true` mematikan ZCULL (gambar depth kembali bisa jadi tujuan salinan); hanya untuk uji bila ada gangguan visual |
 | `pes2017_spike_ms` / `pes2017_auto_dump` | catat lonjakan (ms antar swap) dengan penyebabnya; dump frame otomatis (maks 6) saat beberapa frame berturut-turut lambat |
 | `pes2017_frame_skip` | lompat frame bergantian saat GPU tertinggal (mengurangi slow motion) |
 | `pes2017_cpu_mhz` / `pes2017_gpu_mhz` / `pes2017_mem_mhz`, `pes2017_clocks` | clock dari dalam game |
