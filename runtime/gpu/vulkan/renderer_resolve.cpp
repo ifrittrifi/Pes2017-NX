@@ -716,11 +716,33 @@ void vk::renderer::Resolve(const gpu::RegisterFile& r)
     copy.dstOffsets[1].x = std::min(copy.dstOffsets[1].x, int32_t(HostOf(into.width, s)));
     copy.dstOffsets[1].y = std::min(copy.dstOffsets[1].y, int32_t(HostOf(into.height, s)));
     const VkImage intoImage = into.image;
-    Record([=](VkCommandBuffer command) {
-        vkCmdBlitImage(command, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       intoImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy,
-                       VK_FILTER_LINEAR);
-    });
+    // The same size in the same format needs no sampling: a plain copy is cheaper
+    // on the GPU than a blit, which runs through the 3D engine with a filter.
+    const int32_t blitW = copy.srcOffsets[1].x - copy.srcOffsets[0].x;
+    const int32_t blitH = copy.srcOffsets[1].y - copy.srcOffsets[0].y;
+    if (copyFormat == source->format && blitW > 0 && blitH > 0 &&
+        blitW == copy.dstOffsets[1].x - copy.dstOffsets[0].x &&
+        blitH == copy.dstOffsets[1].y - copy.dstOffsets[0].y)
+    {
+        VkImageCopy plain{};
+        plain.srcSubresource = copy.srcSubresource;
+        plain.dstSubresource = copy.dstSubresource;
+        plain.srcOffset = copy.srcOffsets[0];
+        plain.dstOffset = copy.dstOffsets[0];
+        plain.extent = { uint32_t(blitW), uint32_t(blitH), 1 };
+        Record([=](VkCommandBuffer command) {
+            vkCmdCopyImage(command, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           intoImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &plain);
+        });
+    }
+    else
+    {
+        Record([=](VkCommandBuffer command) {
+            vkCmdBlitImage(command, sourceImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           intoImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy,
+                           VK_FILTER_LINEAR);
+        });
+    }
 
     // The corner a smaller fetch of this surface reads (ResolveRing::exact),
     // copied while the image is still a transfer destination's.
