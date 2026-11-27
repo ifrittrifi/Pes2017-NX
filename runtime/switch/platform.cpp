@@ -171,7 +171,7 @@ void platform::Initialise()
         {
             std::fputs(
                 "[log]\npes2017_report=true\npes2017_gpu_timing=true\npes2017_fps_counter=true\npes2017_spike_ms=70\npes2017_auto_dump=false\n\n"
-                "[scale]\npes2017_scene_scale=0.8\npes2017_upscaler=fsr\npes2017_load_scale=true\npes2017_scale_floor=8\npes2017_scale_budget_ms=22\n\n"
+                "[resolution]\npes2017_resolution=0.8\npes2017_upscaler=fsr\npes2017_resolution_adaptive=true\npes2017_resolution_floor=8\npes2017_resolution_budget_ms=22\n\n"
                 "[graphics]\npes2017_no_msaa=false\npes2017_shadow_strength=1.5\n\n"
                 "[crowd]\npes2017_no_crowd=false\npes2017_crowd_percent=30\npes2017_crowd_adaptive=true\n\n"
                 "[clocks]\npes2017_clocks=true\npes2017_cpu_mhz=1224\npes2017_gpu_mhz=614\npes2017_mem_mhz=1600\n\n"
@@ -200,7 +200,17 @@ void platform::Initialise()
             // Lower case keys (pes2017_report=true) are the file's own; true/false stand for 1/0.
             for (char* c = text; *c; ++c) *c = char(std::toupper(static_cast<unsigned char>(*c)));
             // pes2017_xxx is the file's name for what the program reads as PES17_XXX.
-            if (std::strncmp(text, "PES2017_", 8) == 0) std::memmove(text + 5, text + 8, std::strlen(text + 8) + 1), std::memcpy(text, "PES17", 5);
+            // The file's names for the resolution settings, and the names the program reads them by.
+            static const char* const kRenamed[][2] = {
+                { "PES2017_RESOLUTION_ADAPTIVE", "PES17_LOAD_SCALE" },
+                { "PES2017_RESOLUTION_FLOOR", "PES17_SCALE_FLOOR" },
+                { "PES2017_RESOLUTION_BUDGET_MS", "PES17_SCALE_BUDGET_MS" },
+                { "PES2017_RESOLUTION", "PES17_SCENE_SCALE" },
+            };
+            bool renamed = false;
+            for (const auto& pair : kRenamed)
+                if (std::strcmp(text, pair[0]) == 0) { std::strcpy(text, pair[1]); renamed = true; break; }
+            if (!renamed && std::strncmp(text, "PES2017_", 8) == 0) std::memmove(text + 5, text + 8, std::strlen(text + 8) + 1), std::memcpy(text, "PES17", 5);
             for (char* end = value + std::strlen(value); end > value && (end[-1] == ' ' || end[-1] == '\t'); --end) end[-1] = '\0';
             const auto is = [&](const char* word) {
                 const char* a = value;
