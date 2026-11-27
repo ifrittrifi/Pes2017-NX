@@ -459,7 +459,7 @@ namespace switch_clocks
             };
             if (!(off && off[0] == '0'))
             {
-                want[0] = mhz("PES17_CPU_MHZ", 1785);
+                want[0] = mhz("PES17_CPU_MHZ", 1224);
                 want[1] = mhz("PES17_GPU_MHZ", handheld ? 614 : 768);
                 want[2] = mhz("PES17_MEM_MHZ", 1600);
                 have = R_SUCCEEDED(clkrstInitialize());
