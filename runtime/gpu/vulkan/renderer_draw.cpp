@@ -1076,16 +1076,21 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
         static thread_local std::vector<uint16_t> narrow;
         if (quadsWide) wide.resize(size_t(quads) * 6);
         else narrow.resize(size_t(quads) * 6);
-        // PES17_CROWD_DENSITY (0.25-1, 0.5 by default): the crowd's two billboard passes draw this
-        // share of their people. Both passes split their quads the same way, so the same quads
-        // are dropped in both G-buffers, every frame (no flicker). The passes were 5.5 ms of GPU.
+        // PES17_CROWD_PERCENT (1-100, 30 by default): the crowd's two billboard passes draw this
+        // share of their people, scattered at random. Both passes split their quads the same way,
+        // so the same quads are dropped in both G-buffers, every frame (no flicker). The passes
+        // were 5.5 ms of GPU. (PES17_CROWD_DENSITY, a fraction of 1, is the old name and is read
+        // when the percent is not given.) g.crowdKeep counts in 256ths of the quads.
         if (!g.crowdKeepMax)
         {
-            const double d = std::clamp(env::Real("PES17_CROWD_DENSITY", 0.5), 0.25, 1.0);
-            g.crowdKeepMax = g.crowdKeep = uint32_t(std::lround(d * 4.0));
+            double percent = 30.0;
+            if (std::getenv("PES17_CROWD_PERCENT")) percent = env::Real("PES17_CROWD_PERCENT", 30.0);
+            else if (std::getenv("PES17_CROWD_DENSITY")) percent = env::Real("PES17_CROWD_DENSITY", 0.3) * 100.0;
+            percent = std::clamp(percent, 1.0, 100.0);
+            g.crowdKeepMax = g.crowdKeep = std::clamp<uint32_t>(uint32_t(std::lround(percent * 2.56)), 1u, 256u);
         }
-        const uint32_t keepOfFour = g.crowdKeep;
-        const bool thin = keepOfFour < 4 && ((call.pixelHash >> 40) == 0xB4BBEAull || (call.pixelHash >> 40) == 0x70F64Aull);
+        const uint32_t keep256 = g.crowdKeep;
+        const bool thin = keep256 < 256 && ((call.pixelHash >> 40) == 0xB4BBEAull || (call.pixelHash >> 40) == 0x70F64Aull);
         uint32_t kept = 0;
         for (uint32_t q = 0; q < quads; q++)
         {
@@ -1095,7 +1100,7 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
             {
                 uint32_t h = q * 0x9E3779B1u;
                 h ^= h >> 15; h *= 0x85EBCA77u; h ^= h >> 13; h *= 0xC2B2AE3Du; h ^= h >> 16;
-                if ((h & 3u) >= keepOfFour) continue;
+                if ((h & 255u) >= keep256) continue;
             }
             const uint32_t a = index(q * 4), b = index(q * 4 + 1), c = index(q * 4 + 2), d = index(q * 4 + 3);
             const uint32_t six[6] = { a, b, c, a, c, d };

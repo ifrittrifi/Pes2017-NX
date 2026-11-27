@@ -170,14 +170,11 @@ void platform::Initialise()
         if (FILE* made = std::fopen("sdmc:/switch/pes2017/config.ini", "w"))
         {
             std::fputs(
-                "; sdmc:/switch/pes2017/config.ini\n"
-                "; nilai on/off: true atau false. baris yang diawali ; atau # tidak aktif.\n"
-                "; VERSI UJI: semua opsi diuji aktif (kembalikan ke bawaan setelah tahap final).\n\n"
                 "[log]\npes2017_report=true\npes2017_gpu_timing=true\npes2017_fps_counter=true\n\n"
                 "[graphics]\npes2017_scene_scale=0.8\npes2017_upscaler=fsr\npes2017_shadow_strength=1.5\n"
-                "pes2017_no_msaa=false\npes2017_no_crowd=false\npes2017_crowd_density=0.5\npes2017_crowd_adaptive=true\npes2017_spike_ms=70\npes2017_auto_dump=true\n"
-                "pes2017_load_scale=true\npes2017_scale_floor=11\npes2017_scale_budget_ms=22\n\n"
-                "[clocks]\npes2017_clocks=true\npes2017_cpu_mhz=1785\npes2017_gpu_mhz=614\npes2017_mem_mhz=1600\n\n"
+                "pes2017_no_msaa=false\npes2017_no_crowd=false\npes2017_crowd_percent=30\npes2017_crowd_adaptive=false\npes2017_spike_ms=70\npes2017_auto_dump=true\n"
+                "pes2017_load_scale=true\npes2017_scale_floor=8\npes2017_scale_budget_ms=22\n\n"
+                "[clocks]\npes2017_clocks=true\npes2017_cpu_mhz=1224\npes2017_gpu_mhz=460\npes2017_mem_mhz=1600\n\n"
                 "[performance]\npes2017_frame_skip=true\n\n"
                 "[shader]\n;pes2017_sync_shaders=false\n;pes2017_sync_pipelines=false\n;pes2017_sync_vertex=false\n"
                 ";pes2017_cache_thread=true\n;pes2017_whole_clears=false\n", made);

@@ -54,7 +54,7 @@ Yang paling sering dipakai:
 |---|---|
 | `pes2017_report` / `pes2017_gpu_timing` | log perf dan waktu GPU per pass (untuk kirim log) |
 | `pes2017_scene_scale` | skala scene (0.8 sekarang); FSR menaikkan ke layar |
-| `pes2017_no_crowd` / `pes2017_crowd_density` / `pes2017_crowd_adaptive` | matikan penonton, atau kepadatan 0.25–1 (default 0.5); adaptif menipiskan penonton otomatis saat GPU tertinggal dan mengembalikannya saat lancar |
+| `pes2017_no_crowd` / `pes2017_crowd_percent` / `pes2017_crowd_adaptive` | matikan penonton, atau jumlah penonton 1–100 persen (default 30, tersebar acak); adaptif (default mati) menurunkannya sampai setengah saat GPU tertinggal dan mengembalikannya saat lancar |
 | `pes2017_shadow_strength` | gelap bayangan pemain |
 | `pes2017_spike_ms` / `pes2017_auto_dump` | catat lonjakan (ms antar swap) dengan penyebabnya; dump frame otomatis (maks 6) saat beberapa frame berturut-turut lambat |
 | `pes2017_frame_skip` | lompat frame bergantian saat GPU tertinggal (mengurangi slow motion) |

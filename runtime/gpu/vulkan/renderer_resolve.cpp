@@ -958,15 +958,20 @@ void vk::renderer::Swap(uint32_t frontBuffer)
             ++since;
             if (behind >= 2) { ++heavy; calm = 0; }
             else if (behind == 0) { ++calm; heavy = 0; }
-            if (heavy > 40 && since > 300 && g.crowdKeep > 1)
+            // Steps of a quarter of the chosen share, down to half of it.
+            const uint32_t step = std::max(1u, g.crowdKeepMax / 4);
+            const uint32_t least = std::max(1u, g.crowdKeepMax / 2);
+            if (heavy > 40 && since > 300 && g.crowdKeep > least)
             {
-                g.crowdKeep--; since = 0; heavy = 0;
-                LOGW("crowd: %u of 4 quads kept (the gpu is behind)", g.crowdKeep);
+                g.crowdKeep = std::max(least, g.crowdKeep - std::min(step, g.crowdKeep));
+                since = 0; heavy = 0;
+                LOGW("crowd: %.0f%% of the people kept (the gpu is behind)", g.crowdKeep / 2.56);
             }
             else if (calm > 600 && since > 600 && g.crowdKeep < g.crowdKeepMax)
             {
-                g.crowdKeep++; since = 0; calm = 0;
-                LOGW("crowd: %u of 4 quads kept (the gpu keeps up)", g.crowdKeep);
+                g.crowdKeep = std::min(g.crowdKeepMax, g.crowdKeep + step);
+                since = 0; calm = 0;
+                LOGW("crowd: %.0f%% of the people kept (the gpu keeps up)", g.crowdKeep / 2.56);
             }
         }
     }
