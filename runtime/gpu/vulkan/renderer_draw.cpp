@@ -1089,7 +1089,14 @@ void vk::renderer::Draw(const gpu::RegisterFile& r, const gpu::DrawCall& call)
         uint32_t kept = 0;
         for (uint32_t q = 0; q < quads; q++)
         {
-            if (thin && ((q * keepOfFour) & 3u) >= keepOfFour) continue;
+            // A fixed scramble of the quad's number, so the ones kept are scattered rather than in
+            // rows, and the same ones every frame (no flicker) and in both crowd passes.
+            if (thin)
+            {
+                uint32_t h = q * 0x9E3779B1u;
+                h ^= h >> 15; h *= 0x85EBCA77u; h ^= h >> 13; h *= 0xC2B2AE3Du; h ^= h >> 16;
+                if ((h & 3u) >= keepOfFour) continue;
+            }
             const uint32_t a = index(q * 4), b = index(q * 4 + 1), c = index(q * 4 + 2), d = index(q * 4 + 3);
             const uint32_t six[6] = { a, b, c, a, c, d };
             for (uint32_t k = 0; k < 6; k++)
