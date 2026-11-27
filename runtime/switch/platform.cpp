@@ -173,14 +173,14 @@ void platform::Initialise()
                 "; sdmc:/switch/pes2017/config.ini\n"
                 "; nilai on/off: true atau false. baris yang diawali ; atau # tidak aktif.\n"
                 "; VERSI UJI: semua opsi diuji aktif (kembalikan ke bawaan setelah tahap final).\n\n"
-                "[log]\npes17_report=true\npes17_gpu_timing=true\npes17_fps_counter=true\n\n"
-                "[graphics]\npes17_scene_scale=0.8\npes17_upscaler=fsr\npes17_shadow_strength=1.5\n"
-                "pes17_no_msaa=false\npes17_no_crowd=false\npes17_crowd_density=0.5\npes17_crowd_adaptive=true\npes17_spike_ms=70\npes17_auto_dump=true\n"
-                "pes17_load_scale=true\npes17_scale_floor=11\npes17_scale_budget_ms=22\n\n"
-                "[clocks]\npes17_clocks=true\npes17_cpu_mhz=1785\npes17_gpu_mhz=614\npes17_mem_mhz=1600\n\n"
-                "[performance]\npes17_frame_skip=true\n\n"
-                "[shader]\n;pes17_sync_shaders=false\n;pes17_sync_pipelines=false\n;pes17_sync_vertex=false\n"
-                ";pes17_cache_thread=true\n;pes17_whole_clears=false\n", made);
+                "[log]\npes2017_report=true\npes2017_gpu_timing=true\npes2017_fps_counter=true\n\n"
+                "[graphics]\npes2017_scene_scale=0.8\npes2017_upscaler=fsr\npes2017_shadow_strength=1.5\n"
+                "pes2017_no_msaa=false\npes2017_no_crowd=false\npes2017_crowd_density=0.5\npes2017_crowd_adaptive=true\npes2017_spike_ms=70\npes2017_auto_dump=true\n"
+                "pes2017_load_scale=true\npes2017_scale_floor=11\npes2017_scale_budget_ms=22\n\n"
+                "[clocks]\npes2017_clocks=true\npes2017_cpu_mhz=1785\npes2017_gpu_mhz=614\npes2017_mem_mhz=1600\n\n"
+                "[performance]\npes2017_frame_skip=true\n\n"
+                "[shader]\n;pes2017_sync_shaders=false\n;pes2017_sync_pipelines=false\n;pes2017_sync_vertex=false\n"
+                ";pes2017_cache_thread=true\n;pes2017_whole_clears=false\n", made);
             std::fclose(made);
             env = std::fopen("sdmc:/switch/pes2017/config.ini", "r");
         }
@@ -201,8 +201,10 @@ void platform::Initialise()
             for (char* end = equals; end > text && (end[-1] == ' ' || end[-1] == '\t'); --end) end[-1] = '\0';
             while (*value == ' ' || *value == '\t') ++value;
             if (!*text) continue;
-            // Lower case keys (pes17_report=true) are the file's own; true/false stand for 1/0.
+            // Lower case keys (pes2017_report=true) are the file's own; true/false stand for 1/0.
             for (char* c = text; *c; ++c) *c = char(std::toupper(static_cast<unsigned char>(*c)));
+            // pes2017_xxx is the file's name for what the program reads as PES17_XXX.
+            if (std::strncmp(text, "PES2017_", 8) == 0) std::memmove(text + 5, text + 8, std::strlen(text + 8) + 1), std::memcpy(text, "PES17", 5);
             for (char* end = value + std::strlen(value); end > value && (end[-1] == ' ' || end[-1] == '\t'); --end) end[-1] = '\0';
             const auto is = [&](const char* word) {
                 const char* a = value;

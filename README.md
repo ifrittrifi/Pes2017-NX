@@ -52,13 +52,13 @@ Yang paling sering dipakai:
 
 | Kunci | Fungsi |
 |---|---|
-| `pes17_report` / `pes17_gpu_timing` | log perf dan waktu GPU per pass (untuk kirim log) |
-| `pes17_scene_scale` | skala scene (0.8 sekarang); FSR menaikkan ke layar |
-| `pes17_no_crowd` / `pes17_crowd_density` / `pes17_crowd_adaptive` | matikan penonton, atau kepadatan 0.25–1 (default 0.5); adaptif menipiskan penonton otomatis saat GPU tertinggal dan mengembalikannya saat lancar |
-| `pes17_shadow_strength` | gelap bayangan pemain |
-| `pes17_spike_ms` / `pes17_auto_dump` | catat lonjakan (ms antar swap) dengan penyebabnya; dump frame otomatis (maks 6) saat beberapa frame berturut-turut lambat |
-| `pes17_frame_skip` | lompat frame bergantian saat GPU tertinggal (mengurangi slow motion) |
-| `pes17_cpu_mhz` / `pes17_gpu_mhz` / `pes17_mem_mhz`, `pes17_clocks` | clock dari dalam game |
+| `pes2017_report` / `pes2017_gpu_timing` | log perf dan waktu GPU per pass (untuk kirim log) |
+| `pes2017_scene_scale` | skala scene (0.8 sekarang); FSR menaikkan ke layar |
+| `pes2017_no_crowd` / `pes2017_crowd_density` / `pes2017_crowd_adaptive` | matikan penonton, atau kepadatan 0.25–1 (default 0.5); adaptif menipiskan penonton otomatis saat GPU tertinggal dan mengembalikannya saat lancar |
+| `pes2017_shadow_strength` | gelap bayangan pemain |
+| `pes2017_spike_ms` / `pes2017_auto_dump` | catat lonjakan (ms antar swap) dengan penyebabnya; dump frame otomatis (maks 6) saat beberapa frame berturut-turut lambat |
+| `pes2017_frame_skip` | lompat frame bergantian saat GPU tertinggal (mengurangi slow motion) |
+| `pes2017_cpu_mhz` / `pes2017_gpu_mhz` / `pes2017_mem_mhz`, `pes2017_clocks` | clock dari dalam game |
 
 Cache shader dan pipeline ada di `sdmc:/switch/pes2017/shader/` (`shader_cache.bin`, `pipeline_cache.bin`).
 Jangan dihapus: kunjungan pertama ke tiap tim membuat shader baru, dan glitch hitam di kit pemain berkurang
